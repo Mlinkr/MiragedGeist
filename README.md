@@ -2,60 +2,39 @@
 
 一个纯静态、零服务器、可永久访问的个人主页。所有人都能打开看，只有你（持有 Token 的浏览器）能编辑和上传。
 
+## 🟢 已上线
+
+| | |
+|---|---|
+| **网址** | **https://gmr2002.github.io/MiragedGeist/** |
+| 仓库 | https://github.com/gmr2002/MiragedGeist |
+| 部署 | GitHub Pages · main 分支 · 根目录 · 已强制 HTTPS |
+
+任何人点开链接都能浏览，无需登录。你自己编辑只需下面第 1 步。
+
 ---
 
-## 一、10 分钟上线
+## 一、开始编辑（唯一要做的事）
 
-### 1. 建仓库
-
-登录 GitHub，新建仓库：
-
-| 项目 | 填写 |
-|---|---|
-| Repository name | `MiragedGeist.github.io` |
-| 可见性 | **Public**（必须，Pages 免费版要求公开） |
-| Initialize | 都不勾 |
-
-> 仓库名用 `你的用户名.github.io` 时，网址最短：`https://miragedgeist.github.io/`
-> 如果你的 GitHub 用户名不是 MiragedGeist，仓库名就填 `MiragedGeist`，网址会是 `https://你的用户名.github.io/MiragedGeist/`——照样包含 MiragedGeist。
-
-### 2. 传代码
-
-把本文件夹里**所有内容**（含隐藏文件 `.nojekyll`）传到仓库根目录。
-
-网页方式：仓库页 → `Add file` → `Upload files` → 把文件夹拖进去 → `Commit changes`。
-
-命令行方式：
-
-```bash
-cd miragedgeist
-git init && git branch -M main
-git add -A && git commit -m "feat: 个人名片工作台"
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-git push -u origin main
-```
-
-### 3. 开 Pages
-
-仓库 → `Settings` → 左侧 `Pages` → Source 选 **Deploy from a branch** → Branch 选 `main` / `/ (root)` → Save。
-
-等 1 分钟，页面顶部会出现你的永久网址。**这个链接就是终身的，发给谁都能打开。**
-
-### 4. 生成 Token（只有你自己需要）
+### 1. 生成日常用的 Token
 
 `头像菜单` → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token：
 
 - **Expiration**：选 No expiration（否则到期要重配）
-- **Repository access**：Only select repositories → 选中你刚建的仓库
+- **Repository access**：Only select repositories → 选中 **MiragedGeist**
 - **Permissions** → Repository permissions → **Contents** 改成 `Read and write`
 
 生成后复制那串 `github_pat_...`，**只显示这一次**。
 
-### 5. 开始编辑
+### 2. 连接
 
-打开你的网址 → 拉到页面最底部 → 点右下角那个不起眼的**小菱形 ◆** → 填入 owner / repo / Token → 连接。
+打开 https://gmr2002.github.io/MiragedGeist/ → 拉到页面最底部 → 点右下角那个不起眼的**小菱形 ◆**。
+
+owner 和 repo 会自动填好（`gmr2002` / `MiragedGeist`），**你只需要粘贴 Token** → 点「连接仓库」。
 
 之后就能改头像、背景、简介，加社媒卡片，建专栏传作品。改完点顶部 **「发布到线上」**，约 30 秒后所有访客都能看到新内容。
+
+> Token 只存在你自己浏览器的 localStorage 里，不会写进任何文件、不会推到仓库、访客拿不到。换电脑或换浏览器需重新填一次。
 
 ---
 
@@ -126,11 +105,23 @@ CRF 数值越大文件越小（23 高质量 / 26 均衡 / 30 小体积）。一�
 
 ## 四、绑定自己的域名（可选）
 
-想要 `miragedgeist.com` 这种，需要自己买域名（阿里云/腾讯云/Namecheap，约 60-100 元/年）：
+### 方案 A：改用户名，免费拿到 `miragedgeist.github.io`
+
+经查 **GitHub 用户名 `MiragedGeist` 目前无人注册**。改名后网址会变成最干净的形式：
+
+1. https://github.com/settings/admin → Change username → 改成 `MiragedGeist`
+2. 把仓库 `MiragedGeist` 改名为 `MiragedGeist.github.io`（Settings → 顶部 Repository name）
+3. 网址即变为 **https://miragedgeist.github.io/**
+
+代价：另一个仓库 `Study-room` 的地址会跟着变（GitHub 会自动做旧链接跳转，但 git remote 需要更新）。改名随时可做，早做早省事。
+
+### 方案 B：买自己的域名 `miragedgeist.com`
+
+阿里云 / 腾讯云 / Namecheap 约 60-100 元/年：
 
 1. 域名商后台加解析：
    - `A` 记录 `@` → `185.199.108.153`、`185.199.109.153`、`185.199.110.153`、`185.199.111.153`（四条都加）
-   - `CNAME` 记录 `www` → `你的用户名.github.io`
+   - `CNAME` 记录 `www` → `gmr2002.github.io`
 2. 仓库 Settings → Pages → Custom domain 填入域名 → Save
 3. 等 DNS 生效（几分钟到几小时），回来勾上 **Enforce HTTPS**
 
