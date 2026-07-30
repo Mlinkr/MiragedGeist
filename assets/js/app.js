@@ -97,21 +97,62 @@ function renderCollections(kind, host) {
 }
 
 function collectionCard(kind, col) {
+  const idx = store.data[kind].indexOf(col);
   const picks = featuredOf(col, 3);
   const tiles = picks.map((it, i) => tile(kind, it, () => openLightbox(picks, i)));
-  if (store.editing) {
-    while (tiles.length < 3) tiles.push(el('div', { class: 'tile tile-add', onclick: () => admin.uploadTo(kind, col.id) }, '+'));
-  }
+  // 不足 3 格补预留框：编辑态可点击上传，访客态显示优雅占位
+  while (tiles.length < 3) tiles.push(slot(kind, col.id, tiles.length));
+
+  const titleNode = el('div', { class: 'col-title' },
+    el('span', {
+      class: 'col-title-text' + (store.editing ? ' editable' : ''),
+      title: store.editing ? '点击改名' : '',
+      onclick: store.editing ? (e => { e.stopPropagation(); admin.renameCollection(kind, col.id); }) : null,
+    }, col.title || '未命名专栏'),
+    el('span', { class: 'col-count' }, `${col.items.length} 件`),
+    el('span', { class: 'col-tools' },
+      el('button', { class: 'mini-btn', title: '改名 / 改描述', onclick: e => { e.stopPropagation(); admin.openCollectionForm(kind, col); } }, '✎'),
+      el('button', { class: 'mini-btn', title: '上移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, -1); } }, '↑'),
+      el('button', { class: 'mini-btn', title: '下移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, 1); } }, '↓'),
+      el('button', { class: 'mini-btn danger', title: '删除专栏', onclick: e => { e.stopPropagation(); admin.removeCollection(kind, col.id); } }, '✕')
+    )
+  );
+
   return el('div', { class: 'collection' },
     el('div', { class: 'col-head' },
-      el('div', {},
-        el('div', { class: 'col-title' }, col.title || '未命名专栏',
-          el('span', { class: 'col-count' }, `${col.items.length} 件`)),
+      el('div', { class: 'col-head-l' },
+        titleNode,
         col.desc ? el('div', { class: 'col-desc' }, col.desc) : null
       ),
-      el('a', { class: 'col-more', href: `#/c/${kind}/${col.id}` }, '查看全部 ', el('span', {}, '→'))
+      col.items.length
+        ? el('a', { class: 'col-more', href: `#/c/${kind}/${col.id}` }, '查看全部 ', el('span', {}, '→'))
+        : null
     ),
     el('div', { class: 'tri' }, tiles)
+  );
+}
+
+/** 预留矩形框：编辑态点击上传原图，访客态显示占位 */
+function slot(kind, colId, i) {
+  const isPhoto = kind === 'photos';
+  if (!store.editing) {
+    return el('div', { class: 'tile tile-slot' },
+      el('div', { class: 'slot-inner' },
+        el('div', { class: 'slot-icon' }, isPhoto ? '❖' : '▷'),
+        el('div', { class: 'slot-text' }, '敬请期待')
+      )
+    );
+  }
+  return el('div', {
+    class: 'tile tile-slot editable',
+    title: isPhoto ? '点击上传图片（可多选）' : '点击上传视频',
+    onclick: () => admin.uploadTo(kind, colId),
+  },
+    el('div', { class: 'slot-inner' },
+      el('div', { class: 'slot-plus' }, '+'),
+      el('div', { class: 'slot-text' }, isPhoto ? '上传图片' : '上传视频'),
+      el('div', { class: 'slot-sub' }, `第 ${i + 1} 张`)
+    )
   );
 }
 
@@ -139,11 +180,31 @@ function renderDetail(kind, id) {
   const col = store.findCollection(kind, id);
   if (!col) { location.hash = ''; return; }
   currentDetail = { kind, id };
-  $('#detailTitle').textContent = col.title || '未命名专栏';
+  const tEl = $('#detailTitle');
+  tEl.textContent = col.title || '未命名专栏';
+  tEl.classList.toggle('editable', store.editing);
+  tEl.title = store.editing ? '点击改名' : '';
+  tEl.onclick = store.editing ? () => admin.renameCollection(kind, id) : null;
   $('#detailDesc').textContent = col.desc || '';
   const grid = $('#detailGrid');
   grid.innerHTML = '';
-  $('#detailEmpty').hidden = col.items.length > 0;
+  $('#detailEmpty').hidden = col.items.length > 0 || store.editing;
+  $('#detailEmpty').textContent = store.editing
+    ? '' : '这个专栏还没有作品';
+
+  // 编辑态在最前面放一个上传入口
+  if (store.editing) {
+    grid.append(el('div', {
+      class: 'm-item m-slot', title: '点击上传（可多选）',
+      onclick: () => admin.uploadTo(kind, id),
+    },
+      el('div', { class: 'slot-inner tall' },
+        el('div', { class: 'slot-plus' }, '+'),
+        el('div', { class: 'slot-text' }, kind === 'photos' ? '上传图片' : '上传视频'),
+        el('div', { class: 'slot-sub' }, '支持一次多选')
+      )
+    ));
+  }
 
   col.items.forEach((it, i) => {
     const isVideo = kind === 'videos';

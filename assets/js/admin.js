@@ -6,6 +6,16 @@ import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from '
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
+const LS_QUALITY = 'mg_img_quality';
+
+/* 图片画质档位 */
+export const QUALITY = {
+  origin: { label: '原图直传', desc: '不做任何处理，画质 100% 保留。文件较大，单张建议 < 20MB', maxSide: 0, q: 1 },
+  high:   { label: '高画质（推荐）', desc: '长边 3000px、质量 94%，肉眼几乎无损，体积约为原图 1/4', maxSide: 3000, q: .94 },
+  normal: { label: '标准', desc: '长边 2000px、质量 88%，加载最快，适合大量作品', maxSide: 2000, q: .88 },
+};
+export const getQuality = () => localStorage.getItem(LS_QUALITY) || 'high';
+export const setQuality = v => localStorage.setItem(LS_QUALITY, v);
 
 const rerender = () => window.dispatchEvent(new Event('mg:render'));
 const changed = () => { store.mark(); saveLocal(); rerender(); };
@@ -121,8 +131,9 @@ export function openConsole() {
         store.dirty ? '发布全部修改' : '重新发布一次'),
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => setEditing(!store.editing) },
         store.editing ? '退出编辑模式' : '进入编辑模式'),
-      el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => store.download() }, '导出 site.json 备份'),
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => openProfileForm() }, '编辑名字 / 标签 / 简介'),
+      qualityPicker(),
+      el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => store.download() }, '导出 site.json 备份'),
       el('button', {
         class: 'btn-ghost danger', style: 'width:100%;padding:11px',
         onclick: () => { if (confirmBox('断开连接会清除本机保存的 Token，确定吗？')) { gh.logout(); setEditing(false); closeDrawer(); toast('已断开'); } },
@@ -130,6 +141,28 @@ export function openConsole() {
     );
   }
   openDrawer('管理面板', box);
+}
+
+/** 上传画质选择器 */
+function qualityPicker() {
+  const cur = getQuality();
+  const box = el('div', { class: 'field', style: 'margin:4px 0 15px' }, el('label', {}, '图片上传画质'));
+  const seg = el('div', { class: 'seg', style: 'margin-bottom:8px' });
+  const note = el('div', { class: 'hint' }, QUALITY[cur].desc);
+  Object.entries(QUALITY).forEach(([k, v]) => {
+    seg.append(el('button', {
+      class: k === cur ? 'on' : '',
+      onclick: e => {
+        setQuality(k);
+        [...seg.children].forEach(c => c.classList.remove('on'));
+        e.target.classList.add('on');
+        note.textContent = v.desc;
+        toast(`已切换为「${v.label}」`, 'ok');
+      },
+    }, v.label));
+  });
+  box.append(seg, note);
+  return box;
 }
 
 /* ================= 编辑入口分发 ================= */
@@ -171,8 +204,15 @@ async function pickAndSetImage(which) {
   const [file] = await pickFiles({ accept: 'image/*' });
   if (!file) return;
   const isAvatar = which === 'avatar';
-  const blob = await compressImage(file, isAvatar ? 640 : 2000, .88);
-  const path = await storeMedia(blob, isAvatar ? 'media/avatar' : 'media/cover', 'jpg');
+  busy(true, isAvatar ? '上传头像…' : '上传背景…');
+  let path;
+  try {
+    const blob = await compressImage(file, isAvatar ? 800 : 2800, .93);
+    path = await storeMedia(blob, isAvatar ? `media/avatar-${uid()}` : `media/cover-${uid()}`, 'jpg');
+  } catch (e) {
+    busy(false); return toast('上传失败：' + e.message, 'err');
+  }
+  busy(false);
   store.data.profile[which] = path;
   changed();
   toast(isAvatar ? '头像已更新' : '背景已更新', 'ok');
@@ -315,11 +355,30 @@ export function openCollectionForm(kind, existing) {
   openDrawer(existing ? '编辑专栏' : (kind === 'photos' ? '新建图片专栏' : '新建视频专栏'), box);
 }
 
+/** 首页点标题直接改名 */
+export function renameCollection(kind, id) {
+  const col = store.findCollection(kind, id);
+  if (!col) return;
+  const v = window.prompt('专栏名称', col.title || '');
+  if (v === null) return;
+  col.title = v.trim() || '未命名专栏';
+  changed();
+  toast('已改名，记得发布', 'ok');
+}
+
+export function moveCollection(kind, idx, dir) {
+  const arr = store.data[kind];
+  const j = idx + dir;
+  if (j < 0 || j >= arr.length) return;
+  [arr[idx], arr[j]] = [arr[j], arr[idx]];
+  changed();
+}
+
 export function removeCollection(kind, id) {
   if (!confirmBox('删除整个专栏及其中的作品记录？（仓库里的文件不会自动删除）')) return;
   store.data[kind] = store.data[kind].filter(c => c.id !== id);
   changed();
-  location.hash = '';
+  if (location.hash.includes(id)) location.hash = '';
 }
 
 /* ================= 媒体上传 ================= */
@@ -331,15 +390,29 @@ export async function uploadTo(kind, colId) {
   const files = await pickFiles({ accept: isPhoto ? 'image/*' : 'video/*', multiple: true });
   if (!files.length) return;
 
+  const mode = QUALITY[getQuality()] || QUALITY.high;
   let done = 0;
   for (const file of files) {
     try {
       busy(true, `上传中 ${++done}/${files.length}…`);
       if (isPhoto) {
-        const full = await compressImage(file, 2000, .88);
-        const thumb = await compressImage(file, 700, .8);
         const base = `media/images/${colId}/${uid()}`;
-        const src = await storeMedia(full, base, 'jpg');
+        let src, ext = 'jpg';
+        if (mode.maxSide === 0) {
+          // 原图直传：保留原始文件与扩展名
+          ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+          if (gh.ready && file.size > 45 * 1024 * 1024) {
+            toast(`${file.name} 超过 45MB，已自动转为高画质压缩`, 'err');
+            src = await storeMedia(await compressImage(file, 3000, .94), base, 'jpg');
+            ext = 'jpg';
+          } else {
+            src = await storeMedia(file, base, ext);
+          }
+        } else {
+          src = await storeMedia(await compressImage(file, mode.maxSide, mode.q), base, 'jpg');
+        }
+        // 缩略图始终生成，保证首页加载速度
+        const thumb = await compressImage(file, 700, .8);
         const th = await storeMedia(thumb, base + '-t', 'jpg');
         col.items.push({ id: uid(), src, thumb: th, title: cleanName(file.name), star: col.items.length < 3 });
       } else {

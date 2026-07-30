@@ -27,11 +27,18 @@ export const DEFAULT_DATA = {
 - 短片剪辑 / Vlog / 节奏与叙事
 - 合作与约稿请通过下方任意平台私信
 
-> 进入管理模式后点击「编辑简介」即可替换这段文字，支持 **加粗**、列表、\`高亮\` 和 [链接](https://github.com)。`,
+---
+
+进入编辑模式后点击「编辑简介」即可替换这段文字，支持 **加粗**、列表、\`高亮\` 和链接。`,
   },
   socials: [],
-  photos: [],
-  videos: [],
+  photos: [
+    { id: 'col-portrait', title: '人像', desc: '', items: [] },
+    { id: 'col-commercial', title: '商业修图', desc: '', items: [] },
+  ],
+  videos: [
+    { id: 'col-film', title: '短片', desc: '', items: [] },
+  ],
   updatedAt: '',
 };
 
