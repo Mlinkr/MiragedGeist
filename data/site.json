@@ -3,14 +3,28 @@
   "profile": {
     "name": "MiragedGeist",
     "tagline": "修图产出",
-    "avatar": "media/demo/avatar.jpg",
+    "avatar": "media/avatar.jpg",
     "cover": "media/demo/cover.jpg",
     "chips": [
       "帅哥·美女"
     ],
     "bio": "修图产出，杂修，美女居多，帅哥也有\n只修不讨厌的\n\n"
   },
-  "socials": [],
+  "socials": [
+    {
+      "id": "ms7s8m1bediaa",
+      "platform": "weibo",
+      "url": "https://weibo.com/u/5843817142",
+      "name": "MiragedGeist",
+      "handle": "",
+      "avatar": "",
+      "stats": [
+        1744,
+        684,
+        724
+      ]
+    }
+  ],
   "photos": [
     {
       "id": "demo-portrait",
@@ -94,5 +108,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-30T17:16:56.969Z"
+  "updatedAt": "2026-07-30T17:25:24.404Z"
 }
