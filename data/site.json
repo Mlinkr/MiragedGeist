@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "profile": {
+    "name": "MiragedGeist",
+    "tagline": "修图 · 剪辑 · 视觉叙事",
+    "avatar": "media/demo/avatar.jpg",
+    "cover": "media/demo/cover.jpg",
+    "chips": ["人像精修", "商业修图", "短片剪辑", "接稿中"],
+    "bio": "这里是 **MiragedGeist**，一个把光影当语言的人。\n\n- 人像精修 / 商业修图 / 色彩重塑\n- 短片剪辑 / Vlog / 节奏与叙事\n- 合作与约稿请通过下方任意平台私信\n\n---\n\n目前页面里的图片、视频和文字都是 `示例内容`。点击页面右下角的小菱形进入管理面板，连接你的 GitHub 仓库后，就能替换头像、背景、简介，并上传属于你自己的作品。"
+  },
+  "socials": [],
+  "photos": [
+    {
+      "id": "demo-portrait",
+      "title": "人像 · Portrait",
+      "desc": "示例专栏，进入编辑模式后可改名、删除或上传自己的作品",
+      "items": [
+        { "id": "p1", "src": "media/demo/portrait-1.jpg", "thumb": "media/demo/portrait-1-t.jpg", "title": "示例作品 01", "star": true },
+        { "id": "p2", "src": "media/demo/portrait-2.jpg", "thumb": "media/demo/portrait-2-t.jpg", "title": "示例作品 02", "star": true },
+        { "id": "p3", "src": "media/demo/portrait-3.jpg", "thumb": "media/demo/portrait-3-t.jpg", "title": "示例作品 03", "star": true }
+      ]
+    },
+    {
+      "id": "demo-scene",
+      "title": "场景 · Scene",
+      "desc": "每个分类就是一个专栏，首页展示 3 张精选，点「查看全部」看完整内容",
+      "items": [
+        { "id": "s1", "src": "media/demo/scene-1.jpg", "thumb": "media/demo/scene-1-t.jpg", "title": "示例作品 01", "star": true },
+        { "id": "s2", "src": "media/demo/scene-2.jpg", "thumb": "media/demo/scene-2-t.jpg", "title": "示例作品 02", "star": true },
+        { "id": "s3", "src": "media/demo/scene-3.jpg", "thumb": "media/demo/scene-3-t.jpg", "title": "示例作品 03", "star": true }
+      ]
+    }
+  ],
+  "videos": [
+    {
+      "id": "demo-clip",
+      "title": "短片 · Short Film",
+      "desc": "视频专栏，规则与图片一致：首页精选 3 条，详情页看全部",
+      "items": [
+        { "id": "v1", "src": "media/demo/clip-1.mp4", "poster": "media/demo/clip-1.jpg", "kind": "video", "title": "示例剪辑 01", "star": true },
+        { "id": "v2", "src": "media/demo/clip-2.mp4", "poster": "media/demo/clip-2.jpg", "kind": "video", "title": "示例剪辑 02", "star": true }
+      ]
+    }
+  ],
+  "updatedAt": ""
+}

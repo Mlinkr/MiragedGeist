@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MiragedGeist</title>
+<meta name="description" content="MiragedGeist — 修图与剪辑作品集 · 个人名片" />
+<meta property="og:title" content="MiragedGeist" />
+<meta property="og:description" content="修图与剪辑作品集 · 个人名片" />
+<meta property="og:type" content="profile" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+
+<div class="aurora" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+  <span class="grain"></span>
+</div>
+
+<!-- ============ 首页 ============ -->
+<main id="view-home" class="view">
+
+  <!-- Hero -->
+  <header class="hero" id="hero">
+    <div class="hero-cover" id="heroCover"></div>
+    <div class="hero-veil"></div>
+    <div class="hero-inner">
+      <div class="avatar-wrap">
+        <div class="avatar-ring"></div>
+        <img class="avatar" id="heroAvatar" alt="头像" />
+        <button class="pin-edit avatar-edit" data-edit="avatar" title="更换头像">
+          <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M9 3.5 7.8 5.6H5A2 2 0 0 0 3 7.6v9.9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.6a2 2 0 0 0-2-2h-2.8L15 3.5H9Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </button>
+      </div>
+      <h1 class="hero-name" id="heroName">MiragedGeist</h1>
+      <p class="hero-tagline" id="heroTagline"></p>
+      <div class="hero-meta" id="heroMeta"></div>
+    </div>
+    <button class="pin-edit cover-edit" data-edit="cover" title="更换背景图">
+      <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M9 3.5 7.8 5.6H5A2 2 0 0 0 3 7.6v9.9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.6a2 2 0 0 0-2-2h-2.8L15 3.5H9Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+      <span>背景</span>
+    </button>
+  </header>
+
+  <div class="page">
+
+    <!-- 简介 -->
+    <section class="sec" id="sec-about">
+      <div class="sec-head">
+        <h2>关于我</h2>
+        <button class="btn-ghost edit-only" data-edit="bio">编辑简介</button>
+      </div>
+      <div class="card bio" id="bioBox"></div>
+    </section>
+
+    <!-- 社交媒体 -->
+    <section class="sec" id="sec-social">
+      <div class="sec-head">
+        <h2>社交媒体</h2>
+        <button class="btn-ghost edit-only" data-edit="social-add">+ 粘贴链接添加</button>
+      </div>
+      <div class="social-grid" id="socialGrid"></div>
+    </section>
+
+    <!-- 修图作品 -->
+    <section class="sec" id="sec-photos">
+      <div class="sec-head">
+        <h2>修图作品</h2>
+        <button class="btn-ghost edit-only" data-edit="photo-add">+ 新建专栏</button>
+      </div>
+      <div class="collections" id="photoCollections"></div>
+    </section>
+
+    <!-- 剪辑作品 -->
+    <section class="sec" id="sec-videos">
+      <div class="sec-head">
+        <h2>剪辑作品</h2>
+        <button class="btn-ghost edit-only" data-edit="video-add">+ 新建专栏</button>
+      </div>
+      <div class="collections" id="videoCollections"></div>
+    </section>
+
+    <footer class="foot">
+      <div class="foot-mark" id="footMark">MiragedGeist</div>
+      <div class="foot-sub">© <span id="year"></span> · 保留所有作品版权</div>
+      <button class="foot-key" id="adminKey" title="管理入口">◆</button>
+    </footer>
+  </div>
+</main>
+
+<!-- ============ 专栏详情 ============ -->
+<main id="view-detail" class="view" hidden>
+  <div class="page detail-page">
+    <button class="back-btn" id="backBtn">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      返回
+    </button>
+    <div class="detail-head">
+      <h1 id="detailTitle"></h1>
+      <p id="detailDesc"></p>
+      <div class="detail-tools edit-only">
+        <button class="btn-solid" id="detailUpload">+ 上传到此专栏</button>
+        <button class="btn-ghost" id="detailEdit">编辑专栏信息</button>
+        <button class="btn-ghost danger" id="detailDelete">删除专栏</button>
+      </div>
+    </div>
+    <div class="masonry" id="detailGrid"></div>
+    <div class="empty" id="detailEmpty" hidden>这个专栏还没有作品</div>
+  </div>
+</main>
+
+<!-- ============ 灯箱 ============ -->
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-close" id="lbClose">✕</button>
+  <button class="lb-nav prev" id="lbPrev">‹</button>
+  <button class="lb-nav next" id="lbNext">›</button>
+  <div class="lb-stage" id="lbStage"></div>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
+
+<!-- ============ 管理抽屉 ============ -->
+<aside class="drawer" id="drawer" hidden>
+  <div class="drawer-mask" data-close-drawer></div>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <h3 id="drawerTitle">管理面板</h3>
+      <button class="icon-btn" data-close-drawer>✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</aside>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<div class="busy" id="busy" hidden><div class="busy-box"><div class="spinner"></div><span id="busyText">处理中…</span></div></div>
+
+<input type="file" id="filePicker" hidden />
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
