@@ -173,27 +173,54 @@ function tile(kind, it, onClick) {
 /* ============ 专栏详情 ============ */
 
 let currentDetail = null;
+let detailPage = 0;            // 详情页当前页码（0 基）
+const DETAIL_PAGE_SIZE = 30;   // 每页 30 张（3 张/行 × 10 行）
 
 function renderDetail(kind, id) {
   const col = store.findCollection(kind, id);
   if (!col) { location.hash = ''; return; }
+  const sameCol = currentDetail && currentDetail.id === id;
+  if (!sameCol) detailPage = 0;   // 进入新专栏时回到第一页
   currentDetail = { kind, id };
+
   const tEl = $('#detailTitle');
   tEl.textContent = col.title || '未命名专栏';
   tEl.classList.toggle('editable', store.editing);
   tEl.title = store.editing ? '点击编辑或删除专栏' : '';
   tEl.onclick = store.editing ? () => admin.openCollectionForm(col) : null;
   $('#detailDesc').textContent = col.desc || '';
+
+  $('#detailAdd').onclick = () => admin.uploadTo(kind, id);
+  $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
+  $('#detailEdit').onclick = () => admin.openCollectionForm(col);
+  $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
+
+  paintDetailGrid();
+}
+
+/** 仅重绘网格 + 分页器（翻页、上传、删除、排序后复用，不重置页码） */
+function paintDetailGrid() {
+  if (!currentDetail) return;
+  const col = store.findCollection(currentDetail.kind, currentDetail.id);
+  if (!col) return;
   const grid = $('#detailGrid');
   grid.innerHTML = '';
-  $('#detailEmpty').hidden = col.items.length > 0 || store.editing;
+
+  const items = col.items;
+  const totalPages = items.length ? Math.ceil(items.length / DETAIL_PAGE_SIZE) : 1;
+  if (detailPage >= totalPages) detailPage = totalPages - 1;
+  if (detailPage < 0) detailPage = 0;
+  const start = detailPage * DETAIL_PAGE_SIZE;
+  const pageItems = items.slice(start, start + DETAIL_PAGE_SIZE);
+
+  $('#detailEmpty').hidden = items.length > 0 || store.editing;
   $('#detailEmpty').textContent = store.editing ? '' : '这个专栏还没有作品';
 
-  // 编辑态在最前面放一个上传入口
+  // 编辑态：每页最前方都放一个上传入口
   if (store.editing) {
     grid.append(el('div', {
       class: 'm-item m-slot', title: '点击上传作品（图片/视频，最多 9 个）',
-      onclick: () => admin.uploadTo(kind, id),
+      onclick: () => admin.uploadTo(currentDetail.kind, currentDetail.id),
     },
       el('div', { class: 'slot-inner tall' },
         el('div', { class: 'slot-plus' }, '+'),
@@ -203,7 +230,8 @@ function renderDetail(kind, id) {
     ));
   }
 
-  col.items.forEach((it, i) => {
+  pageItems.forEach((it, i) => {
+    const globalIndex = start + i;   // 全量数组中的真实下标（灯箱/拖拽排序用）
     const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
     const thumb = isVideo ? (it.poster || it.thumb) : (it.thumb || it.src);
     const media = isVideo
@@ -212,9 +240,9 @@ function renderDetail(kind, id) {
     const node = el('div', { class: 'm-item' },
       media,
       el('div', { class: 'tile-tools' },
-        el('button', { class: 'mini-btn', title: '设为精选', onclick: e => { e.stopPropagation(); admin.toggleStar(kind, id, it.id); } }, it.star ? '★' : '☆'),
-        el('button', { class: 'mini-btn', title: '改标题', onclick: e => { e.stopPropagation(); admin.renameItem(kind, id, it.id); } }, '✎'),
-        el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeItem(kind, id, it.id); } }, '✕')
+        el('button', { class: 'mini-btn', title: '设为精选', onclick: e => { e.stopPropagation(); admin.toggleStar(currentDetail.kind, currentDetail.id, it.id); } }, it.star ? '★' : '☆'),
+        el('button', { class: 'mini-btn', title: '改标题', onclick: e => { e.stopPropagation(); admin.renameItem(currentDetail.kind, currentDetail.id, it.id); } }, '✎'),
+        el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeItem(currentDetail.kind, currentDetail.id, it.id); } }, '✕')
       )
     );
     if (!isVideo) {
@@ -224,20 +252,69 @@ function renderDetail(kind, id) {
           e.stopPropagation();
           return;
         }
-        openLightbox(col.items, i);
+        openLightbox(col.items, globalIndex);
       });
     }
     if (store.editing) {
-      enableDragSort(node, i);
+      enableDragSort(node, globalIndex);
       enableLongPressDelete(node, it);
     }
     grid.append(node);
   });
 
-  $('#detailAdd').onclick = () => admin.uploadTo(kind, id);
-  $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
-  $('#detailEdit').onclick = () => admin.openCollectionForm(col);
-  $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
+  renderPager($('#detailPager'), totalPages, detailPage);
+}
+
+/* 分页器：总页数 > 1 时显示；点击只翻页，不触发保存 */
+function renderPager(pager, totalPages, current) {
+  pager.hidden = totalPages <= 1;
+  pager.innerHTML = '';
+  if (totalPages <= 1) return;
+
+  pager.append(el('button', {
+    class: 'pg-btn' + (current === 0 ? ' disabled' : ''),
+    disabled: current === 0 ? 'disabled' : null,
+    'aria-label': '上一页',
+    onclick: () => { detailPage = current - 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+  }, '‹'));
+
+  pageNumbers(current, totalPages).forEach(n => {
+    if (n === '…') {
+      pager.append(el('span', { class: 'pg-ellipsis' }, '…'));
+    } else {
+      const on = n === current + 1;
+      pager.append(el('button', {
+        class: 'pg-btn' + (on ? ' on' : ''),
+        'aria-label': `第 ${n} 页`,
+        onclick: () => { detailPage = n - 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+      }, String(n)));
+    }
+  });
+
+  pager.append(el('button', {
+    class: 'pg-btn' + (current === totalPages - 1 ? ' disabled' : ''),
+    disabled: current === totalPages - 1 ? 'disabled' : null,
+    'aria-label': '下一页',
+    onclick: () => { detailPage = current + 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+  }, '›'));
+}
+
+/* 生成分页数字（0 基 current，总页数 total），超出阈值用省略号折叠 */
+function pageNumbers(current, total) {
+  const cur = current + 1;
+  const out = [];
+  if (total <= 9) {
+    for (let i = 1; i <= total; i++) out.push(i);
+    return out;
+  }
+  out.push(1);
+  const left = Math.max(2, cur - 1);
+  const right = Math.min(total - 1, cur + 1);
+  if (left > 2) out.push('…');
+  for (let i = left; i <= right; i++) out.push(i);
+  if (right < total - 1) out.push('…');
+  out.push(total);
+  return out;
 }
 
 /* 编辑模式：拖拽排序 */

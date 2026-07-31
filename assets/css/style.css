@@ -238,6 +238,16 @@ p{margin:0}
 .masonry .m-item.m-slot{aspect-ratio:4/5}
 .empty{text-align:center;color:var(--txt-3);padding:70px 0;font-size:14px}
 
+/* ---------- 分页器 ---------- */
+.pager{display:flex;justify-content:center;align-items:center;gap:7px;flex-wrap:wrap;margin-top:30px}
+.pg-btn{min-width:38px;height:38px;padding:0 11px;border-radius:11px;background:var(--card);
+  border:1px solid var(--line);color:var(--txt-2);font-size:13.5px;display:grid;place-items:center;
+  transition:.22s cubic-bezier(.2,.7,.3,1)}
+.pg-btn:hover:not(.disabled):not(.on){color:#fff;border-color:var(--line-strong);background:var(--card-hover)}
+.pg-btn.on{background:linear-gradient(120deg,var(--accent),#5b3df5);color:#fff;border-color:transparent;font-weight:600}
+.pg-btn.disabled{opacity:.35;cursor:not-allowed}
+.pg-ellipsis{color:var(--txt-3);padding:0 4px;font-size:14px;user-select:none}
+
 /* ---------- 按钮 ---------- */
 .btn-ghost,.btn-solid{font-size:13px;padding:8px 15px;border-radius:10px;transition:.24s;white-space:nowrap}
 .btn-ghost{border:1px solid var(--line);color:var(--txt-2);background:rgba(255,255,255,.03)}
