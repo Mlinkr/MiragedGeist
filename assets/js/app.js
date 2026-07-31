@@ -108,7 +108,9 @@ function collectionCard(kind, col) {
       title: store.editing ? '点击编辑或删除专栏' : '',
       onclick: store.editing ? (e => { e.stopPropagation(); admin.openCollectionForm(col); }) : null,
     }, col.title || '未命名专栏'),
-    el('span', { class: 'col-count' }, `${col.items.length} 件`),
+    el('span', { class: 'col-count small' }, `${col.items.length} 件`),
+    el('span', { class: 'col-flex' }),
+    el('a', { class: 'col-more icon', href: `#/c/${kind}/${col.id}`, title: '查看全部' }, '→'),
     el('span', { class: 'col-tools' },
       el('button', { class: 'mini-btn', title: '编辑 / 删除', onclick: e => { e.stopPropagation(); admin.openCollectionForm(col); } }, '✎'),
       el('button', { class: 'mini-btn', title: '上移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, -1); } }, '↑'),
@@ -123,10 +125,6 @@ function collectionCard(kind, col) {
         titleNode,
         col.desc ? el('div', { class: 'col-desc' }, col.desc) : null
       )
-    ),
-    el('div', { class: 'col-tri-bar' },
-      el('span', { class: 'col-tri-hint' }, picks.length ? '随机展示 3 张' : ''),
-      el('a', { class: 'col-more small', href: `#/c/${kind}/${col.id}` }, '查看全部 →')
     ),
     el('div', { class: 'tri' }, tiles)
   );
