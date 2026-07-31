@@ -125,19 +125,33 @@ async function fetchGitHub(url) {
 }
 
 async function fetchWeibo(url) {
-  let uid = (url.match(/weibo\.(?:com|cn)\/u\/(\d{6,})/i) || [])[1]
-         || (url.match(/weibo\.(?:com|cn)\/(\d{6,})/i) || [])[1];
-
-  if (!uid) {
-    // 自定义域名 weibo.com/xxx → 用移动端搜索兜底
-    const nick = (url.match(/weibo\.(?:com|cn)\/n\/([^/?#]+)/i) || url.match(/weibo\.(?:com|cn)\/([^/?#]+)/i) || [])[1];
-    if (!nick) return null;
-    const s = await viaProxy(`https://m.weibo.cn/api/container/getIndex?containerid=100103type%3D3%26q%3D${encodeURIComponent(decodeURIComponent(nick))}`);
-    uid = s?.data?.cards?.[0]?.card_group?.[0]?.user?.id;
-    if (!uid) return null;
+  const page = url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  // 1) 优先结构化接口（能拿到粉丝数）；仅当链接里直接带 UID 时尝试
+  const uid = (page.match(/weibo\.(?:com|cn)\/u\/(\d{6,})/i) || [])[1];
+  let structured = null;
+  if (uid) {
+    try { structured = await fetchWeiboStructured(uid); } catch {}
   }
+  // 2) OG 标签兜底：读 PC 主页公开 HTML，无需登录，至少拿到昵称 + 头像
+  let og = null;
+  try { og = await fetchMetaOnly(page); } catch {}
+  if (!structured && !og) return null;
+  const name = (structured?.name || og?.name || '')
+    .replace(/_?的?微博.*$/, '').trim(); // 去掉 "的微博_微博" 这类后缀
+  return {
+    name,
+    handle: structured ? structured.handle : '',
+    avatar: structured?.avatar || og?.avatar || '',
+    stats: structured ? structured.stats : [-1, -1, -1],
+  };
+}
 
-  const d = await viaProxy(`https://m.weibo.cn/api/container/getIndex?type=uid&value=${uid}`);
+/** 移动端容器接口，能顺带拿到粉丝/关注/微博数；失败返回 null（被风控时正常） */
+async function fetchWeiboStructured(uid) {
+  let d = null;
+  try {
+    d = await viaProxy(`https://m.weibo.cn/api/container/getIndex?type=uid&value=${uid}`);
+  } catch { return null; }
   const u = d?.data?.userInfo;
   if (!u) return null;
   return {
