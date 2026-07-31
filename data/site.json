@@ -467,14 +467,6 @@
           "kind": "image",
           "title": "IMG 2619",
           "star": false
-        },
-        {
-          "id": "ms8vj2gt2u4eq",
-          "src": "media/works/col-portrait/ms8viuye3501x.jpg",
-          "thumb": "media/works/col-portrait/ms8viuye3501x-t.jpg",
-          "kind": "image",
-          "title": "IMG 3904",
-          "star": false
         }
       ]
     },
@@ -678,5 +670,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-31T11:53:34.631Z"
+  "updatedAt": "2026-07-31T12:18:48.148Z"
 }
