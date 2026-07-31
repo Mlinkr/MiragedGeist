@@ -45,19 +45,19 @@ function renderSocials() {
   list.forEach((s, idx) => grid.append(socialCard(s, idx)));
 }
 
-function brandBadge(P, custom) {
+function brandTile(P, custom) {
   if (custom) {
-    const img = el('img', { class: 'sc-badge', src: custom, alt: P.name });
+    const img = el('img', { class: 'sc-av', src: custom, alt: P.name, style: `--brand:${P.color};background:${P.color}` });
     img.onerror = () => {
-      const span = el('span', { class: 'sc-badge', title: P.name });
-      span.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
-      img.replaceWith(span);
+      const div = el('div', { class: 'sc-av brand-tile', style: `--brand:${P.color};background:${P.color}` });
+      div.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
+      img.replaceWith(div);
     };
     return img;
   }
-  const span = el('span', { class: 'sc-badge', title: P.name });
-  span.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
-  return span;
+  const div = el('div', { class: 'sc-av brand-tile', style: `--brand:${P.color};background:${P.color}` });
+  div.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
+  return div;
 }
 
 function socialCard(s, idx) {
@@ -76,13 +76,7 @@ function socialCard(s, idx) {
       style: 'position:absolute;inset:0;z-index:1',
     }),
     el('div', { class: 'sc-avwrap' },
-      el('img', {
-        class: 'sc-av', loading: 'lazy', referrerpolicy: 'no-referrer',
-        src: s.avatar || placeholder(P.badge, 200, 200, '#1c1c2a', P.color + '55'),
-        alt: s.name || P.name,
-        onerror: e => { e.target.src = placeholder(P.badge, 200, 200, '#1c1c2a', P.color + '55'); },
-      }),
-      brandBadge(P, s.icon)
+      brandTile(P, s.icon)
     ),
     el('div', { class: 'sc-main' },
       el('div', { class: 'sc-name' }, s.name || P.name),
