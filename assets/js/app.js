@@ -46,7 +46,15 @@ function renderSocials() {
 }
 
 function brandBadge(P, custom) {
-  if (custom) return el('img', { class: 'sc-badge', src: custom, alt: P.name });
+  if (custom) {
+    const img = el('img', { class: 'sc-badge', src: custom, alt: P.name });
+    img.onerror = () => {
+      const span = el('span', { class: 'sc-badge', title: P.name });
+      span.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
+      img.replaceWith(span);
+    };
+    return img;
+  }
   const span = el('span', { class: 'sc-badge', title: P.name });
   span.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
   return span;

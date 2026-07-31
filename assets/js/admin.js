@@ -299,6 +299,33 @@ export function openSocialForm(existing) {
         } catch (e) { busy(false); toast('转存失败：' + e.message, 'err'); }
       },
     }, '把头像存到我的仓库（更稳定）') : null,
+    gh.ready ? el('button', {
+      class: 'btn-ghost', style: 'width:100%;padding:9px;margin:-8px 0 8px',
+      onclick: async () => {
+        const [file] = await pickFiles({ accept: 'image/*' });
+        if (!file) return;
+        try {
+          busy(true, '上传头像…');
+          const blob = await compressImage(file, 400, .92);
+          avatarIn.value = await storeMedia(blob, `media/social/${s.id}`, 'jpg');
+          busy(false); toast('头像已上传', 'ok');
+        } catch (e) { busy(false); toast('上传失败：' + e.message, 'err'); }
+      },
+    }, '从本机上传头像（覆盖链接头像）') : null,
+    field('自定义图标（可选）', iconIn, '留空则使用官方品牌图标；上传后会覆盖官方图标。'),
+    gh.ready ? el('button', {
+      class: 'btn-ghost', style: 'width:100%;padding:9px;margin:-8px 0 16px',
+      onclick: async () => {
+        const [file] = await pickFiles({ accept: 'image/*' });
+        if (!file) return;
+        try {
+          busy(true, '上传图标…');
+          const blob = await compressImage(file, 200, .95);
+          iconIn.value = await storeMedia(blob, `media/social/${s.id}-icon`, 'jpg');
+          busy(false); toast('图标已上传（覆盖官方图标）', 'ok');
+        } catch (e) { busy(false); toast('上传失败：' + e.message, 'err'); }
+      },
+    }, '上传自定义图标（覆盖官方图标）') : null,
     statRow,
     actions(existing ? '保存修改' : '添加卡片', () => {
       const url = normalizeUrl(urlIn.value);
