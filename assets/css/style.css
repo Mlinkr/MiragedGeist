@@ -218,7 +218,7 @@ p{margin:0}
 .detail-title-row h1.editable:hover::after{opacity:1;color:var(--accent)}
 .detail-head p{color:var(--txt-2);margin-top:9px;font-size:14.5px;max-width:640px}
 .detail-tools{display:flex;gap:9px;margin-top:18px;flex-wrap:wrap}
-.masonry{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.masonry{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
 .masonry .m-item{position:relative;border-radius:15px;overflow:hidden;
   background:#14141f;border:1px solid var(--line);cursor:zoom-in;transition:.3s;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .masonry .m-item:hover{border-color:var(--line-strong);transform:translateY(-3px)}
@@ -363,6 +363,10 @@ body.editing{padding-top:40px}
 body.editing .cover-edit{top:56px}
 
 /* ---------- 响应式 ---------- */
+/* 手机端固定 3 列；更宽窗口用 auto-fill 让列数随宽度自动增加 */
+@media(max-width:600px){
+  .masonry{grid-template-columns:repeat(3,1fr);gap:7px}
+}
 @media(max-width:760px){
   .page{padding:0 15px 70px}
   .hero{margin-bottom:80px;padding-top:56px}
