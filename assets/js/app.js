@@ -10,8 +10,7 @@ export function renderAll() {
   renderHero();
   renderBio();
   renderSocials();
-  renderCollections('photos', $('#photoCollections'));
-  renderCollections('videos', $('#videoCollections'));
+  renderCollections('works', $('#workCollections'));
   $('#year').textContent = new Date().getFullYear();
   $('#footMark').textContent = store.data.profile.name || 'MiragedGeist';
   document.title = store.data.profile.name || 'MiragedGeist';
@@ -110,8 +109,10 @@ function collectionCard(kind, col) {
       onclick: store.editing ? (e => { e.stopPropagation(); admin.renameCollection(kind, col.id); }) : null,
     }, col.title || '未命名专栏'),
     el('span', { class: 'col-count' }, `${col.items.length} 件`),
+    el('span', { class: 'col-flex' }),
+    el('a', { class: 'col-more', href: `#/c/${kind}/${col.id}` }, '查看全部 →'),
     el('span', { class: 'col-tools' },
-      el('button', { class: 'mini-btn', title: '改名 / 改描述', onclick: e => { e.stopPropagation(); admin.openCollectionForm(kind, col); } }, '✎'),
+      el('button', { class: 'mini-btn', title: '改名 / 改描述', onclick: e => { e.stopPropagation(); admin.openCollectionForm(col); } }, '✎'),
       el('button', { class: 'mini-btn', title: '上移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, -1); } }, '↑'),
       el('button', { class: 'mini-btn', title: '下移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, 1); } }, '↓'),
       el('button', { class: 'mini-btn danger', title: '删除专栏', onclick: e => { e.stopPropagation(); admin.removeCollection(kind, col.id); } }, '✕')
@@ -123,45 +124,42 @@ function collectionCard(kind, col) {
       el('div', { class: 'col-head-l' },
         titleNode,
         col.desc ? el('div', { class: 'col-desc' }, col.desc) : null
-      ),
-      col.items.length
-        ? el('a', { class: 'col-more', href: `#/c/${kind}/${col.id}` }, '查看全部 ', el('span', {}, '→'))
-        : null
+      )
     ),
     el('div', { class: 'tri' }, tiles)
   );
 }
 
-/** 预留矩形框：编辑态点击上传原图，访客态显示占位 */
+/** 预留矩形框：编辑态点击上传作品，访客态显示占位 */
 function slot(kind, colId, i) {
-  const isPhoto = kind === 'photos';
   if (!store.editing) {
     return el('div', { class: 'tile tile-slot' },
       el('div', { class: 'slot-inner' },
-        el('div', { class: 'slot-icon' }, isPhoto ? '❖' : '▷'),
+        el('div', { class: 'slot-icon' }, '✦'),
         el('div', { class: 'slot-text' }, '敬请期待')
       )
     );
   }
   return el('div', {
     class: 'tile tile-slot editable',
-    title: isPhoto ? '点击上传图片（可多选）' : '点击上传视频',
+    title: '点击上传作品（图片/视频，最多 9 个）',
     onclick: () => admin.uploadTo(kind, colId),
   },
     el('div', { class: 'slot-inner' },
       el('div', { class: 'slot-plus' }, '+'),
-      el('div', { class: 'slot-text' }, isPhoto ? '上传图片' : '上传视频'),
-      el('div', { class: 'slot-sub' }, `第 ${i + 1} 张`)
+      el('div', { class: 'slot-text' }, '上传作品'),
+      el('div', { class: 'slot-sub' }, `第 ${i + 1} 位`)
     )
   );
 }
 
 function tile(kind, it, onClick) {
-  const isVideo = kind === 'videos';
-  const media = isVideo && !it.poster
+  const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
+  const thumb = isVideo ? (it.poster || it.thumb) : (it.thumb || it.src);
+  const media = isVideo && !thumb
     ? el('video', { src: it.src, preload: 'metadata', muted: 'muted', playsinline: '' })
     : el('img', {
-        src: (isVideo ? it.poster : (it.thumb || it.src)) || placeholder('作品'),
+        src: thumb || placeholder('作品'),
         loading: 'lazy', referrerpolicy: 'no-referrer', alt: it.title || '',
       });
   return el('div', { class: `tile${isVideo ? ' video' : ''}`, onclick: onClick },
@@ -195,22 +193,23 @@ function renderDetail(kind, id) {
   // 编辑态在最前面放一个上传入口
   if (store.editing) {
     grid.append(el('div', {
-      class: 'm-item m-slot', title: '点击上传（可多选）',
+      class: 'm-item m-slot', title: '点击上传作品（图片/视频，最多 9 个）',
       onclick: () => admin.uploadTo(kind, id),
     },
       el('div', { class: 'slot-inner tall' },
         el('div', { class: 'slot-plus' }, '+'),
-        el('div', { class: 'slot-text' }, kind === 'photos' ? '上传图片' : '上传视频'),
+        el('div', { class: 'slot-text' }, '上传作品'),
         el('div', { class: 'slot-sub' }, '支持一次多选')
       )
     ));
   }
 
   col.items.forEach((it, i) => {
-    const isVideo = kind === 'videos';
+    const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
+    const thumb = isVideo ? (it.poster || it.thumb) : (it.thumb || it.src);
     const media = isVideo
       ? el('video', { src: it.src, poster: it.poster || '', controls: '', preload: 'metadata', playsinline: '' })
-      : el('img', { src: it.src, loading: 'lazy', referrerpolicy: 'no-referrer', alt: it.title || '' });
+      : el('img', { src: thumb, loading: 'lazy', referrerpolicy: 'no-referrer', alt: it.title || '' });
     const node = el('div', { class: 'm-item' },
       media,
       (it.title || it.desc) ? el('div', { class: 'm-cap' }, [it.title, it.desc].filter(Boolean).join(' · ')) : null,
@@ -225,7 +224,7 @@ function renderDetail(kind, id) {
   });
 
   $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
-  $('#detailEdit').onclick = () => admin.openCollectionForm(kind, col);
+  $('#detailEdit').onclick = () => admin.openCollectionForm(col);
   $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
 }
 
@@ -244,11 +243,23 @@ function paintLightbox() {
   if (!it) return;
   const stage = $('#lbStage');
   stage.innerHTML = '';
-  const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '') || it.kind === 'video';
+  const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
   stage.append(isVideo
     ? el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' })
     : el('img', { src: it.src, referrerpolicy: 'no-referrer', alt: it.title || '' }));
-  $('#lbCap').textContent = [it.title, it.desc].filter(Boolean).join(' · ');
+
+  const cap = $('#lbCap');
+  cap.innerHTML = '';
+  const text = [it.title, it.desc].filter(Boolean).join(' · ') || (isVideo ? '视频作品' : '图片作品');
+  cap.append(
+    el('span', {}, text),
+    el('a', {
+      class: 'lb-download',
+      href: it.src,
+      download: it.title || (isVideo ? 'video' : 'image'),
+      target: '_blank',
+    }, isVideo ? '下载原视频' : '下载原图')
+  );
   const multi = lbItems.length > 1;
   $('#lbPrev').hidden = !multi; $('#lbNext').hidden = !multi;
 }
@@ -263,12 +274,18 @@ function step(d) { lbIndex = (lbIndex + d + lbItems.length) % lbItems.length; pa
 
 function route() {
   const h = location.hash;
-  const m = h.match(/^#\/c\/(photos|videos)\/(.+)$/);
+  const m = h.match(/^#\/c\/works\/(.+)$/);
   if (m) {
     $('#view-home').hidden = true;
     $('#view-detail').hidden = false;
-    renderDetail(m[1], m[2]);
+    renderDetail('works', m[1]);
     window.scrollTo(0, 0);
+    return;
+  }
+  // 兼容旧版路由，自动重定向到新路由
+  const old = h.match(/^#\/c\/(photos|videos)\/(.+)$/);
+  if (old) {
+    location.replace(`#/c/works/${old[2]}`);
     return;
   }
   $('#view-detail').hidden = true;

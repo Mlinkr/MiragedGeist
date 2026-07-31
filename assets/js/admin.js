@@ -173,8 +173,7 @@ export function handleEdit(key) {
     case 'cover': return pickAndSetImage('cover');
     case 'bio': return openProfileForm();
     case 'social-add': return openSocialForm(null);
-    case 'photo-add': return openCollectionForm('photos', null);
-    case 'video-add': return openCollectionForm('videos', null);
+    case 'work-add': return openCollectionForm(null);
   }
 }
 
@@ -339,25 +338,25 @@ export function moveSocial(idx, dir) {
 
 /* ================= 专栏 ================= */
 
-export function openCollectionForm(kind, existing) {
+export function openCollectionForm(existing) {
   const c = existing || { id: uid(), title: '', desc: '', items: [] };
   const box = el('div', {},
-    field('专栏名称', input({ id: 'c_title', value: c.title, placeholder: kind === 'photos' ? '例如：人像 / 女性 / 商业 / 风景' : '例如：短片 / Vlog / 商业广告' })),
+    field('专栏名称', input({ id: 'c_title', value: c.title, placeholder: '例如：人像 / 商业 / 短片' })),
     field('一句话描述', input({ id: 'c_desc', value: c.desc, placeholder: '可留空' })),
     actions(existing ? '保存' : '创建专栏', () => {
       c.title = $('#c_title').value.trim() || '未命名专栏';
       c.desc = $('#c_desc').value.trim();
-      if (!existing) store.data[kind].push(c);
+      if (!existing) store.data.works.push(c);
       changed(); closeDrawer();
       toast(existing ? '已保存' : '专栏已创建，点方块上传作品', 'ok');
     })
   );
-  openDrawer(existing ? '编辑专栏' : (kind === 'photos' ? '新建图片专栏' : '新建视频专栏'), box);
+  openDrawer(existing ? '编辑专栏' : '新建专栏', box);
 }
 
 /** 首页点标题直接改名 */
 export function renameCollection(kind, id) {
-  const col = store.findCollection(kind, id);
+  const col = store.findCollection('works', id);
   if (!col) return;
   const v = window.prompt('专栏名称', col.title || '');
   if (v === null) return;
@@ -367,7 +366,7 @@ export function renameCollection(kind, id) {
 }
 
 export function moveCollection(kind, idx, dir) {
-  const arr = store.data[kind];
+  const arr = store.data.works;
   const j = idx + dir;
   if (j < 0 || j >= arr.length) return;
   [arr[idx], arr[j]] = [arr[j], arr[idx]];
@@ -376,7 +375,7 @@ export function moveCollection(kind, idx, dir) {
 
 export function removeCollection(kind, id) {
   if (!confirmBox('删除整个专栏及其中的作品记录？（仓库里的文件不会自动删除）')) return;
-  store.data[kind] = store.data[kind].filter(c => c.id !== id);
+  store.data.works = store.data.works.filter(c => c.id !== id);
   changed();
   if (location.hash.includes(id)) location.hash = '';
 }
@@ -384,19 +383,27 @@ export function removeCollection(kind, id) {
 /* ================= 媒体上传 ================= */
 
 export async function uploadTo(kind, colId) {
-  const col = store.findCollection(kind, colId);
+  const col = store.findCollection('works', colId);
   if (!col) return;
-  const isPhoto = kind === 'photos';
-  const files = await pickFiles({ accept: isPhoto ? 'image/*' : 'video/*', multiple: true });
+  let files = await pickFiles({ accept: 'image/*,video/*', multiple: true });
   if (!files.length) return;
+
+  // 限制单次最多 9 个文件
+  if (files.length > 9) {
+    toast(`一次最多上传 9 个文件，已自动选取前 9 个`, '');
+    files = files.slice(0, 9);
+  }
 
   const mode = QUALITY[getQuality()] || QUALITY.high;
   let done = 0;
   for (const file of files) {
     try {
       busy(true, `上传中 ${++done}/${files.length}…`);
-      if (isPhoto) {
-        const base = `media/images/${colId}/${uid()}`;
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      const base = `media/works/${colId}/${uid()}`;
+
+      if (isImage) {
         let src, ext = 'jpg';
         if (mode.maxSide === 0) {
           // 原图直传：保留原始文件与扩展名
@@ -414,17 +421,19 @@ export async function uploadTo(kind, colId) {
         // 缩略图始终生成，保证首页加载速度
         const thumb = await compressImage(file, 700, .8);
         const th = await storeMedia(thumb, base + '-t', 'jpg');
-        col.items.push({ id: uid(), src, thumb: th, title: cleanName(file.name), star: col.items.length < 3 });
-      } else {
+        col.items.push({ id: uid(), src, thumb: th, kind: 'image', title: cleanName(file.name), star: col.items.length < 3 });
+      } else if (isVideo) {
         if (gh.ready && file.size > 45 * 1024 * 1024) {
-          toast(`${file.name} 超过 45MB，建议压缩后再传，或用外链视频`, 'err');
+          toast(`${file.name} 超过 45MB，建议压缩后再传`, 'err');
           continue;
         }
         const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-        const src = await storeMedia(file, `media/videos/${colId}/${uid()}`, ext);
+        const src = await storeMedia(file, base, ext);
         const poster = await videoPoster(file).catch(() => null);
-        const posterPath = poster ? await storeMedia(poster, `media/videos/${colId}/${uid()}-p`, 'jpg') : '';
-        col.items.push({ id: uid(), src, poster: posterPath, kind: 'video', title: cleanName(file.name), star: col.items.length < 3 });
+        const posterPath = poster ? await storeMedia(poster, `${base}-p`, 'jpg') : '';
+        col.items.push({ id: uid(), src, poster: posterPath, thumb: posterPath, kind: 'video', title: cleanName(file.name), star: col.items.length < 3 });
+      } else {
+        toast(`${file.name} 不是图片或视频，已跳过`, 'err');
       }
     } catch (e) {
       toast(`${file.name} 上传失败：${e.message}`, 'err');
@@ -437,14 +446,14 @@ export async function uploadTo(kind, colId) {
 }
 
 export function toggleStar(kind, colId, itemId) {
-  const col = store.findCollection(kind, colId);
+  const col = store.findCollection('works', colId);
   const it = col?.items.find(i => i.id === itemId);
   if (!it) return;
   it.star = !it.star;
   changed();
 }
 export function renameItem(kind, colId, itemId) {
-  const col = store.findCollection(kind, colId);
+  const col = store.findCollection('works', colId);
   const it = col?.items.find(i => i.id === itemId);
   if (!it) return;
   const v = window.prompt('作品标题', it.title || '');
@@ -453,7 +462,7 @@ export function renameItem(kind, colId, itemId) {
   changed();
 }
 export function removeItem(kind, colId, itemId) {
-  const col = store.findCollection(kind, colId);
+  const col = store.findCollection('works', colId);
   if (!col || !confirmBox('从专栏中移除这件作品？')) return;
   const it = col.items.find(i => i.id === itemId);
   col.items = col.items.filter(i => i.id !== itemId);

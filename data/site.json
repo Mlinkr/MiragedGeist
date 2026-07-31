@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "profile": {
     "name": "MiragedGeist",
     "tagline": "修图产出",
@@ -25,7 +25,7 @@
       ]
     }
   ],
-  "photos": [
+  "works": [
     {
       "id": "col-portrait",
       "title": "人像",
@@ -37,9 +37,7 @@
       "title": "商业修图",
       "desc": "",
       "items": []
-    }
-  ],
-  "videos": [
+    },
     {
       "id": "col-film",
       "title": "短片",

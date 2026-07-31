@@ -13,8 +13,10 @@ export function placeholder(text = 'MiragedGeist', w = 800, h = 1000, c1 = '#1b1
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
 export const DEFAULT_DATA = {
-  version: 1,
+  version: 2,
   profile: {
     name: 'MiragedGeist',
     tagline: '修图 · 剪辑 · 视觉叙事',
@@ -32,11 +34,9 @@ export const DEFAULT_DATA = {
 进入编辑模式后点击「编辑简介」即可替换这段文字，支持 **加粗**、列表、\`高亮\` 和链接。`,
   },
   socials: [],
-  photos: [
+  works: [
     { id: 'col-portrait', title: '人像', desc: '', items: [] },
     { id: 'col-commercial', title: '商业修图', desc: '', items: [] },
-  ],
-  videos: [
     { id: 'col-film', title: '短片', desc: '', items: [] },
   ],
   updatedAt: '',
@@ -84,7 +84,9 @@ export const store = {
   },
 
   findCollection(kind, id) {
-    return (this.data[kind] || []).find(c => c.id === id);
+    if (kind === 'works') return (this.data.works || []).find(c => c.id === id);
+    // 兼容旧路由旧代码，兜底查 works
+    return (this.data.works || []).find(c => c.id === id);
   },
 };
 
@@ -92,9 +94,36 @@ function migrate(json) {
   const d = { ...structuredClone(DEFAULT_DATA), ...json };
   d.profile = { ...DEFAULT_DATA.profile, ...(json.profile || {}) };
   d.socials = Array.isArray(json.socials) ? json.socials : [];
-  d.photos = Array.isArray(json.photos) ? json.photos : [];
-  d.videos = Array.isArray(json.videos) ? json.videos : [];
-  for (const c of [...d.photos, ...d.videos]) c.items = Array.isArray(c.items) ? c.items : [];
+
+  // 新版统一使用 works
+  if (Array.isArray(json.works)) {
+    d.works = json.works;
+  } else {
+    // 兼容旧版：合并 photos + videos
+    d.works = [];
+    const seen = new Set();
+    for (const c of [...(json.photos || []), ...(json.videos || [])]) {
+      if (!c || typeof c !== 'object') continue;
+      let id = c.id || uid();
+      if (seen.has(id)) id = `${id}-${Date.now().toString(36)}`;
+      seen.add(id);
+      const items = Array.isArray(c.items) ? c.items : [];
+      d.works.push({
+        id,
+        title: c.title || '未命名专栏',
+        desc: c.desc || '',
+        items: items.map(it => ({
+          ...it,
+          kind: it.kind || (it.poster || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '') ? 'video' : 'image'),
+        })),
+      });
+    }
+  }
+  for (const c of d.works) c.items = Array.isArray(c.items) ? c.items : [];
+
+  // 清理旧字段
+  delete d.photos;
+  delete d.videos;
   return d;
 }
 
