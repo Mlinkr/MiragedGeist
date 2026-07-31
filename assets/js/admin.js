@@ -220,7 +220,7 @@ async function pickAndSetImage(which) {
 /* ================= 社交媒体 ================= */
 
 export function openSocialForm(existing) {
-  const s = existing || { id: uid(), platform: 'link', url: '', name: '', handle: '', avatar: '', stats: [-1, -1, -1] };
+  const s = existing || { id: uid(), platform: 'link', url: '', name: '', handle: '', avatar: '', icon: '', stats: [-1, -1, -1] };
   const box = el('div');
 
   const urlIn = input({ id: 's_url', value: s.url, placeholder: '粘贴主页链接，例如 https://weibo.com/u/1234567890' });
@@ -231,6 +231,7 @@ export function openSocialForm(existing) {
   const nameIn = input({ id: 's_name', value: s.name, placeholder: '显示名称' });
   const handleIn = input({ id: 's_handle', value: s.handle, placeholder: '@账号 / UID（可留空）' });
   const avatarIn = input({ id: 's_avatar', value: s.avatar, placeholder: '头像图片地址（可留空）' });
+  const iconIn = input({ id: 's_icon', value: s.icon || '', placeholder: '自定义图标地址（留空则用官方图标）' });
   const st = [0, 1, 2].map(i => el('input', { type: 'number', id: 's_st' + i, value: (s.stats?.[i] ?? -1) }));
 
   const paintStatLabels = () => {
@@ -253,12 +254,7 @@ export function openSocialForm(existing) {
     platSel.value = plat;
     paintStatLabels();
     const P = PLATFORMS[plat];
-    if (!AUTO_OK.includes(plat)) {
-      status.innerHTML = `<span style="color:#ffd79a">${P.name} 有登录风控，抓不到公开数据，请手动填写下面几项（外观完全一样）。</span>`;
-      if (!nameIn.value) nameIn.value = P.name;
-      return;
-    }
-    status.textContent = '正在抓取…';
+    status.textContent = '正在识别…';
     busy(true, `正在读取 ${P.name} 资料…`);
     let info = null;
     try {
@@ -269,7 +265,7 @@ export function openSocialForm(existing) {
     } catch { info = null; }
     busy(false);
     if (!info) {
-      status.innerHTML = '<span style="color:#ffd79a">没抓到（接口或代理受限），手动填一下即可，效果完全一样。</span>';
+      status.innerHTML = '<span style="color:#ffd79a">没能自动识别（接口/代理受限或主页无公开信息），可用主页公开信息生成，仍为空就手动填一下，效果完全一样。</span>';
       if (!nameIn.value) nameIn.value = P.name;
       return;
     }
@@ -281,7 +277,7 @@ export function openSocialForm(existing) {
   };
 
   box.append(
-    el('div', { class: 'tip' }, '粘贴主页链接后点「识别并抓取」。微博 / B站 / 知乎 / GitHub 等能自动带出头像与粉丝数；小红书、抖音有风控，手动填写即可。'),
+    el('div', { class: 'tip' }, '粘贴主页链接后点「识别并抓取」。能自动带出头像与昵称；抓不到时也会用主页公开信息生成，仍为空再手动填写即可。'),
     field('主页链接', urlIn),
     el('button', { class: 'btn-solid', style: 'width:100%;padding:10px;margin:-6px 0 14px', onclick: grab }, '识别并抓取'),
     status,
@@ -312,6 +308,7 @@ export function openSocialForm(existing) {
         name: nameIn.value.trim() || PLATFORMS[platSel.value].name,
         handle: handleIn.value.trim(),
         avatar: avatarIn.value.trim(),
+        icon: iconIn.value.trim(),
         stats: st.map(n => Number(n.value)),
       });
       if (!existing) store.data.socials.push(s);

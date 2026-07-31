@@ -45,6 +45,13 @@ function renderSocials() {
   list.forEach((s, idx) => grid.append(socialCard(s, idx)));
 }
 
+function brandBadge(P, custom) {
+  if (custom) return el('img', { class: 'sc-badge', src: custom, alt: P.name });
+  const span = el('span', { class: 'sc-badge', title: P.name });
+  span.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${P.icon}"/></svg>`;
+  return span;
+}
+
 function socialCard(s, idx) {
   const P = PLATFORMS[s.platform] || PLATFORMS.link;
   const stats = (s.stats || []).map(Number);
@@ -67,7 +74,7 @@ function socialCard(s, idx) {
         alt: s.name || P.name,
         onerror: e => { e.target.src = placeholder(P.badge, 200, 200, '#1c1c2a', P.color + '55'); },
       }),
-      el('span', { class: 'sc-badge', title: P.name }, P.badge)
+      brandBadge(P, s.icon)
     ),
     el('div', { class: 'sc-main' },
       el('div', { class: 'sc-name' }, s.name || P.name),
