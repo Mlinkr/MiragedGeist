@@ -528,6 +528,20 @@ export function removeItem(kind, colId, itemId) {
   }
 }
 
+/** 移动作品到其它专栏：从源专栏移除、追加到目标专栏 */
+export function moveItem(kind, fromColId, itemId, toColId) {
+  if (!fromColId || !toColId || fromColId === toColId) return;
+  const from = store.findCollection('works', fromColId);
+  const to = store.findCollection('works', toColId);
+  if (!from || !to) return;
+  const it = from.items.find(i => i.id === itemId);
+  if (!it) return;
+  from.items = from.items.filter(i => i.id !== itemId);
+  to.items.push(it);
+  changed();
+  toast(`已移动到「${to.title || '未命名专栏'}」`, 'ok');
+}
+
 /* ---------- 存储：连接了仓库就上传，否则退化为本地 dataURL ---------- */
 async function storeMedia(blobOrFile, basePath, ext) {
   if (gh.ready) {

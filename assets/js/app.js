@@ -1,5 +1,5 @@
 /* 入口：渲染 · 路由 · 灯箱 */
-import { $, $$, el, fmtNum, md2html, closeDrawer } from './ui.js';
+import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js';
 import { store, featuredOf, placeholder } from './store.js';
 import { PLATFORMS } from './social.js';
 import * as admin from './admin.js';
@@ -235,6 +235,7 @@ function paintDetailGrid() {
       media,
       el('div', { class: 'tile-tools' },
         el('button', { class: 'mini-btn', title: '设为精选', onclick: e => { e.stopPropagation(); admin.toggleStar(currentDetail.kind, currentDetail.id, it.id); } }, it.star ? '★' : '☆'),
+        el('button', { class: 'mini-btn', title: '移动到其它专栏', onclick: e => { e.stopPropagation(); openMovePicker(it.id, currentDetail.id); } }, '⇄'),
         el('button', { class: 'mini-btn', title: '改标题', onclick: e => { e.stopPropagation(); admin.renameItem(currentDetail.kind, currentDetail.id, it.id); } }, '✎'),
         el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeItem(currentDetail.kind, currentDetail.id, it.id); } }, '✕')
       )
@@ -259,7 +260,27 @@ function paintDetailGrid() {
   renderPager($('#detailPager'), totalPages, detailPage);
 }
 
-/* 分页器：总页数 > 1 时显示；点击只翻页，不触发保存 */
+/** 弹出选择器：把某件作品移动到其它专栏 */
+function openMovePicker(itemId, fromColId) {
+  const others = (store.data.works || []).filter(c => c.id !== fromColId);
+  if (!others.length) {
+    toast('还没有其它专栏，先去新建一个吧');
+    return;
+  }
+  const opts = others.map(c => el('option', { value: c.id },
+    `${c.title || '未命名专栏'}${c.items?.length ? `（${c.items.length} 件）` : ''}`));
+  const sel = el('select', { class: 'drawer-select' }, ...opts);
+  const node = el('div', {},
+    el('p', { class: 'hint' }, '选择要移动到的目标专栏：'),
+    field('目标专栏', sel),
+    actions('移动到这里', () => {
+      const to = sel.value;
+      closeDrawer();
+      admin.moveItem('works', fromColId, itemId, to);
+    })
+  );
+  openDrawer('移动作品到其它专栏', node);
+}
 function renderPager(pager, totalPages, current) {
   pager.hidden = totalPages <= 1;
   pager.innerHTML = '';
