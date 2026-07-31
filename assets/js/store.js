@@ -127,9 +127,13 @@ function migrate(json) {
   return d;
 }
 
-/** 精选：优先取标了星的，不足用前面的补齐到 3 个 */
+/** 随机取 n 张作品作为首页展示 */
 export function featuredOf(col, n = 3) {
-  const stars = col.items.filter(i => i.star);
-  const rest = col.items.filter(i => !i.star);
-  return [...stars, ...rest].slice(0, n);
+  const arr = [...col.items];
+  // Fisher-Yates 洗牌
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
 }

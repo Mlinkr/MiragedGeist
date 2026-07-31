@@ -342,15 +342,31 @@ export function openCollectionForm(existing) {
   const c = existing || { id: uid(), title: '', desc: '', items: [] };
   const box = el('div', {},
     field('专栏名称', input({ id: 'c_title', value: c.title, placeholder: '例如：人像 / 商业 / 短片' })),
-    field('一句话描述', input({ id: 'c_desc', value: c.desc, placeholder: '可留空' })),
-    actions(existing ? '保存' : '创建专栏', () => {
-      c.title = $('#c_title').value.trim() || '未命名专栏';
-      c.desc = $('#c_desc').value.trim();
-      if (!existing) store.data.works.push(c);
-      changed(); closeDrawer();
-      toast(existing ? '已保存' : '专栏已创建，点方块上传作品', 'ok');
-    })
+    field('一句话描述', input({ id: 'c_desc', value: c.desc, placeholder: '可留空' }))
   );
+
+  const btnRow = el('div', { class: 'drawer-actions' },
+    el('button', { class: 'btn-ghost', onclick: closeDrawer }, '取消'),
+    el('button', {
+      class: 'btn-solid',
+      onclick: () => {
+        c.title = $('#c_title').value.trim() || '未命名专栏';
+        c.desc = $('#c_desc').value.trim();
+        if (!existing) store.data.works.push(c);
+        changed(); closeDrawer();
+        toast(existing ? '已保存' : '专栏已创建，点方块上传作品', 'ok');
+      }
+    }, existing ? '保存' : '创建专栏')
+  );
+
+  if (existing) {
+    btnRow.append(el('button', {
+      class: 'btn-ghost danger',
+      onclick: () => { closeDrawer(); removeCollection('works', c.id); }
+    }, '删除专栏'));
+  }
+
+  box.append(btnRow);
   openDrawer(existing ? '编辑专栏' : '新建专栏', box);
 }
 
@@ -373,11 +389,26 @@ export function moveCollection(kind, idx, dir) {
   changed();
 }
 
-export function removeCollection(kind, id) {
-  if (!confirmBox('删除整个专栏及其中的作品记录？（仓库里的文件不会自动删除）')) return;
+export async function removeCollection(kind, id) {
+  const col = store.findCollection('works', id);
+  if (!col) return;
+  if (!confirmBox(`删除专栏「${col.title}」及其中的 ${col.items.length} 件作品？\n仓库里的文件也会一并删除。`)) return;
+
+  // 删除仓库中的媒体文件
+  if (gh.ready) {
+    const paths = new Set();
+    for (const it of col.items) {
+      [it.src, it.thumb, it.poster].forEach(p => { if (p && p.startsWith('media/')) paths.add(p); });
+    }
+    for (const p of paths) {
+      try { await gh.deleteFile(p, 'chore: remove collection media'); } catch { /* ignore */ }
+    }
+  }
+
   store.data.works = store.data.works.filter(c => c.id !== id);
   changed();
   if (location.hash.includes(id)) location.hash = '';
+  toast('专栏已删除', 'ok');
 }
 
 /* ================= 媒体上传 ================= */

@@ -105,14 +105,12 @@ function collectionCard(kind, col) {
   const titleNode = el('div', { class: 'col-title' },
     el('span', {
       class: 'col-title-text' + (store.editing ? ' editable' : ''),
-      title: store.editing ? '点击改名' : '',
-      onclick: store.editing ? (e => { e.stopPropagation(); admin.renameCollection(kind, col.id); }) : null,
+      title: store.editing ? '点击编辑或删除专栏' : '',
+      onclick: store.editing ? (e => { e.stopPropagation(); admin.openCollectionForm(col); }) : null,
     }, col.title || '未命名专栏'),
     el('span', { class: 'col-count' }, `${col.items.length} 件`),
-    el('span', { class: 'col-flex' }),
-    el('a', { class: 'col-more', href: `#/c/${kind}/${col.id}` }, '查看全部 →'),
     el('span', { class: 'col-tools' },
-      el('button', { class: 'mini-btn', title: '改名 / 改描述', onclick: e => { e.stopPropagation(); admin.openCollectionForm(col); } }, '✎'),
+      el('button', { class: 'mini-btn', title: '编辑 / 删除', onclick: e => { e.stopPropagation(); admin.openCollectionForm(col); } }, '✎'),
       el('button', { class: 'mini-btn', title: '上移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, -1); } }, '↑'),
       el('button', { class: 'mini-btn', title: '下移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, 1); } }, '↓'),
       el('button', { class: 'mini-btn danger', title: '删除专栏', onclick: e => { e.stopPropagation(); admin.removeCollection(kind, col.id); } }, '✕')
@@ -125,6 +123,10 @@ function collectionCard(kind, col) {
         titleNode,
         col.desc ? el('div', { class: 'col-desc' }, col.desc) : null
       )
+    ),
+    el('div', { class: 'col-tri-bar' },
+      el('span', { class: 'col-tri-hint' }, picks.length ? '随机展示 3 张' : ''),
+      el('a', { class: 'col-more small', href: `#/c/${kind}/${col.id}` }, '查看全部 →')
     ),
     el('div', { class: 'tri' }, tiles)
   );
@@ -181,14 +183,13 @@ function renderDetail(kind, id) {
   const tEl = $('#detailTitle');
   tEl.textContent = col.title || '未命名专栏';
   tEl.classList.toggle('editable', store.editing);
-  tEl.title = store.editing ? '点击改名' : '';
-  tEl.onclick = store.editing ? () => admin.renameCollection(kind, id) : null;
+  tEl.title = store.editing ? '点击编辑或删除专栏' : '';
+  tEl.onclick = store.editing ? () => admin.openCollectionForm(col) : null;
   $('#detailDesc').textContent = col.desc || '';
   const grid = $('#detailGrid');
   grid.innerHTML = '';
   $('#detailEmpty').hidden = col.items.length > 0 || store.editing;
-  $('#detailEmpty').textContent = store.editing
-    ? '' : '这个专栏还没有作品';
+  $('#detailEmpty').textContent = store.editing ? '' : '这个专栏还没有作品';
 
   // 编辑态在最前面放一个上传入口
   if (store.editing) {
@@ -209,23 +210,90 @@ function renderDetail(kind, id) {
     const thumb = isVideo ? (it.poster || it.thumb) : (it.thumb || it.src);
     const media = isVideo
       ? el('video', { src: it.src, poster: it.poster || '', controls: '', preload: 'metadata', playsinline: '' })
-      : el('img', { src: thumb, loading: 'lazy', referrerpolicy: 'no-referrer', alt: it.title || '' });
+      : el('img', { src: thumb, loading: 'lazy', referrerpolicy: 'no-referrer', alt: '' });
     const node = el('div', { class: 'm-item' },
       media,
-      (it.title || it.desc) ? el('div', { class: 'm-cap' }, [it.title, it.desc].filter(Boolean).join(' · ')) : null,
       el('div', { class: 'tile-tools' },
         el('button', { class: 'mini-btn', title: '设为精选', onclick: e => { e.stopPropagation(); admin.toggleStar(kind, id, it.id); } }, it.star ? '★' : '☆'),
         el('button', { class: 'mini-btn', title: '改标题', onclick: e => { e.stopPropagation(); admin.renameItem(kind, id, it.id); } }, '✎'),
         el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeItem(kind, id, it.id); } }, '✕')
       )
     );
-    if (!isVideo) media.addEventListener('click', () => openLightbox(col.items, i));
+    if (!isVideo) {
+      media.addEventListener('click', e => {
+        if (window.__blockLightboxClick) {
+          window.__blockLightboxClick = false;
+          e.stopPropagation();
+          return;
+        }
+        openLightbox(col.items, i);
+      });
+    }
+    if (store.editing) {
+      enableDragSort(node, i);
+      enableLongPressDelete(node, it);
+    }
     grid.append(node);
   });
 
+  $('#detailAdd').onclick = () => admin.uploadTo(kind, id);
   $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
   $('#detailEdit').onclick = () => admin.openCollectionForm(col);
   $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
+}
+
+/* 编辑模式：拖拽排序 */
+function enableDragSort(node, index) {
+  node.draggable = true;
+  node.dataset.dragIndex = index;
+  node.addEventListener('dragstart', e => {
+    e.dataTransfer.effectAllowed = 'move';
+    node.classList.add('dragging');
+    window.__dragSourceIndex = index;
+  });
+  node.addEventListener('dragend', () => {
+    node.classList.remove('dragging');
+    window.__dragSourceIndex = null;
+    $$('.m-item').forEach(n => n.classList.remove('drag-over'));
+  });
+  node.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    node.classList.add('drag-over');
+  });
+  node.addEventListener('dragleave', () => node.classList.remove('drag-over'));
+  node.addEventListener('drop', e => {
+    e.preventDefault();
+    node.classList.remove('drag-over');
+    const src = window.__dragSourceIndex;
+    if (src == null || src === index || !currentDetail) return;
+    const col = store.findCollection('works', currentDetail.id);
+    if (!col) return;
+    const arr = col.items;
+    [arr[src], arr[index]] = [arr[index], arr[src]];
+    changed();
+  });
+}
+
+/* 编辑模式：长按删除 */
+function enableLongPressDelete(node, it) {
+  let timer = null;
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  const start = e => {
+    if (e.button && e.button !== 0) return;
+    timer = setTimeout(() => {
+      timer = null;
+      window.__blockLightboxClick = true;
+      setTimeout(() => window.__blockLightboxClick = false, 120);
+      if (window.confirm('删除这张作品？')) admin.removeItem('works', currentDetail.id, it.id);
+    }, 600);
+  };
+  node.addEventListener('touchstart', start, { passive: true });
+  node.addEventListener('touchend', clear);
+  node.addEventListener('touchmove', clear);
+  node.addEventListener('mousedown', start);
+  node.addEventListener('mouseup', clear);
+  node.addEventListener('mouseleave', clear);
 }
 
 /* ============ 灯箱 ============ */
@@ -246,20 +314,16 @@ function paintLightbox() {
   const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
   stage.append(isVideo
     ? el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' })
-    : el('img', { src: it.src, referrerpolicy: 'no-referrer', alt: it.title || '' }));
+    : el('img', { src: it.src, referrerpolicy: 'no-referrer', alt: '' }));
 
   const cap = $('#lbCap');
   cap.innerHTML = '';
-  const text = [it.title, it.desc].filter(Boolean).join(' · ') || (isVideo ? '视频作品' : '图片作品');
-  cap.append(
-    el('span', {}, text),
-    el('a', {
-      class: 'lb-download',
-      href: it.src,
-      download: it.title || (isVideo ? 'video' : 'image'),
-      target: '_blank',
-    }, isVideo ? '下载原视频' : '下载原图')
-  );
+  cap.append(el('a', {
+    class: 'lb-download',
+    href: it.src,
+    download: it.title || (isVideo ? 'video' : 'image'),
+    target: '_blank',
+  }, isVideo ? '下载原视频' : '下载原图'));
   const multi = lbItems.length > 1;
   $('#lbPrev').hidden = !multi; $('#lbNext').hidden = !multi;
 }

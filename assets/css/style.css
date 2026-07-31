@@ -148,9 +148,12 @@ p{margin:0}
 .col-tools{display:none;gap:5px;margin-left:2px}
 .editing .col-tools{display:inline-flex}
 .col-desc{font-size:13px;color:var(--txt-3);margin-top:4px}
+.col-tri-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-4px 0 11px}
+.col-tri-hint{font-size:11.5px;color:var(--txt-3)}
 .col-more{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--txt-2);
   padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);
   transition:.25s;white-space:nowrap}
+.col-more.small{font-size:12px;padding:4px 10px}
 .col-more:hover{color:#fff;border-color:var(--accent);background:rgba(124,92,255,.16)}
 
 .tri{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
@@ -210,21 +213,28 @@ p{margin:0}
 .back-btn:hover{color:#fff;border-color:var(--line-strong);transform:translateX(-3px)}
 .back-btn svg{width:16px;height:16px}
 .detail-head{margin-bottom:30px}
-.detail-head h1{font-size:clamp(26px,4.6vw,38px);font-weight:700;display:inline-block}
-.detail-head h1.editable{cursor:text;padding:3px 12px;margin-left:-12px;border-radius:11px;
+.detail-title-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.detail-title-row h1{font-size:clamp(26px,4.6vw,38px);font-weight:700;display:inline-block;margin:0}
+.detail-title-row h1.editable{cursor:text;padding:3px 12px;margin-left:-12px;border-radius:11px;
   border:1px dashed transparent;transition:.22s}
-.detail-head h1.editable:hover{border-color:var(--accent);background:rgba(124,92,255,.1)}
-.detail-head h1.editable::after{content:"✎";font-size:15px;color:var(--txt-3);margin-left:11px;
+.detail-title-row h1.editable:hover{border-color:var(--accent);background:rgba(124,92,255,.1)}
+.detail-title-row h1.editable::after{content:"✎";font-size:15px;color:var(--txt-3);margin-left:11px;
   vertical-align:middle;opacity:0;transition:.22s}
-.detail-head h1.editable:hover::after{opacity:1;color:var(--accent)}
+.detail-title-row h1.editable:hover::after{opacity:1;color:var(--accent)}
+.btn-add{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:24px;font-weight:300;
+  background:linear-gradient(120deg,var(--accent),#5b3df5);color:#fff;box-shadow:0 10px 26px -12px var(--accent);
+  transition:.25s}
+.btn-add:hover{filter:brightness(1.12);transform:translateY(-1px) rotate(90deg)}
 .detail-head p{color:var(--txt-2);margin-top:9px;font-size:14.5px;max-width:640px}
 .detail-tools{display:flex;gap:9px;margin-top:18px;flex-wrap:wrap}
-.masonry{columns:3;column-gap:14px}
-.masonry .m-item{break-inside:avoid;margin-bottom:14px;position:relative;border-radius:15px;overflow:hidden;
-  background:#14141f;border:1px solid var(--line);cursor:zoom-in;transition:.3s}
+.masonry{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.masonry .m-item{position:relative;border-radius:15px;overflow:hidden;
+  background:#14141f;border:1px solid var(--line);cursor:zoom-in;transition:.3s;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .masonry .m-item:hover{border-color:var(--line-strong);transform:translateY(-3px)}
-.masonry .m-item img,.masonry .m-item video{width:100%;display:block}
-.m-cap{padding:11px 13px;font-size:12.5px;color:var(--txt-2);border-top:1px solid var(--line)}
+.masonry .m-item img,.masonry .m-item video{width:100%;height:100%;object-fit:cover;display:block;aspect-ratio:4/5}
+.masonry .m-item.dragging{opacity:.5;border-color:var(--accent)}
+.masonry .m-item.drag-over{transform:scale(1.03);border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,255,.3)}
+.masonry .m-item.m-slot{aspect-ratio:4/5}
 .empty{text-align:center;color:var(--txt-3);padding:70px 0;font-size:14px}
 
 /* ---------- 按钮 ---------- */
@@ -363,9 +373,8 @@ body.editing .cover-edit{top:56px}
   .collection{padding:15px}
   .col-head{flex-direction:column;align-items:flex-start}
   .tri{gap:7px}
-  .masonry{columns:2;column-gap:9px}
-  .masonry .m-item{margin-bottom:9px}
+  .masonry{grid-template-columns:repeat(2,1fr);gap:9px}
   .lb-nav{font-size:30px;width:42px;height:42px}
   .drawer-panel{width:100%}
 }
-@media(max-width:420px){.masonry{columns:1}}
+@media(max-width:420px){.masonry{grid-template-columns:1fr}}
