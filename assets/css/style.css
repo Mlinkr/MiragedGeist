@@ -373,8 +373,8 @@ body.editing .cover-edit{top:56px}
   .collection{padding:15px}
   .col-head{flex-direction:column;align-items:flex-start}
   .tri{gap:7px}
-  .masonry{grid-template-columns:repeat(2,1fr);gap:9px}
+  .masonry{gap:8px}
   .lb-nav{font-size:30px;width:42px;height:42px}
   .drawer-panel{width:100%}
 }
-@media(max-width:420px){.masonry{grid-template-columns:1fr}}
+@media(max-width:420px){.masonry{gap:6px}}
