@@ -22,7 +22,8 @@
         1744,
         684,
         724
-      ]
+      ],
+      "icon": "media/social/ms7s8m1bediaa-icon.jpg"
     },
     {
       "id": "ms8puqxsul5i3",
@@ -35,7 +36,8 @@
         -1,
         -1,
         -1
-      ]
+      ],
+      "icon": "media/social/ms8puqxsul5i3-icon.jpg"
     }
   ],
   "works": [
@@ -670,5 +672,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-07-31T12:18:48.148Z"
+  "updatedAt": "2026-07-31T12:33:40.233Z"
 }
