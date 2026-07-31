@@ -190,7 +190,6 @@ function renderDetail(kind, id) {
   tEl.onclick = store.editing ? () => admin.openCollectionForm(col) : null;
   $('#detailDesc').textContent = col.desc || '';
 
-  $('#detailAdd').onclick = () => admin.uploadTo(kind, id);
   $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
   $('#detailEdit').onclick = () => admin.openCollectionForm(col);
   $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
@@ -215,20 +214,6 @@ function paintDetailGrid() {
 
   $('#detailEmpty').hidden = items.length > 0 || store.editing;
   $('#detailEmpty').textContent = store.editing ? '' : '这个专栏还没有作品';
-
-  // 编辑态：每页最前方都放一个上传入口
-  if (store.editing) {
-    grid.append(el('div', {
-      class: 'm-item m-slot', title: '点击上传作品（图片/视频，最多 9 个）',
-      onclick: () => admin.uploadTo(currentDetail.kind, currentDetail.id),
-    },
-      el('div', { class: 'slot-inner tall' },
-        el('div', { class: 'slot-plus' }, '+'),
-        el('div', { class: 'slot-text' }, '上传作品'),
-        el('div', { class: 'slot-sub' }, '支持一次多选')
-      )
-    ));
-  }
 
   pageItems.forEach((it, i) => {
     const globalIndex = start + i;   // 全量数组中的真实下标（灯箱/拖拽排序用）
