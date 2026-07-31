@@ -37,7 +37,7 @@
           "thumb": "media/images/col-portrait/ms840np92h33f-t.jpg",
           "kind": "image",
           "title": "IMG 3945",
-          "star": true
+          "star": false
         },
         {
           "id": "ms884t6jerueh",
@@ -45,7 +45,7 @@
           "thumb": "media/works/col-portrait/ms884m6rfd5d6-t.jpg",
           "kind": "image",
           "title": "IMG 3946",
-          "star": true
+          "star": false
         },
         {
           "id": "ms8855a1o1t3x",
@@ -53,7 +53,7 @@
           "thumb": "media/works/col-portrait/ms884t6kp5y2b-t.jpg",
           "kind": "image",
           "title": "IMG 3944",
-          "star": true
+          "star": false
         },
         {
           "id": "ms885bvsnd6ai",
@@ -222,6 +222,78 @@
           "kind": "image",
           "title": "IMG 3138",
           "star": false
+        },
+        {
+          "id": "ms8ngsbf9apm8",
+          "src": "media/works/col-portrait/ms8nglq3d2b3z.jpeg",
+          "thumb": "media/works/col-portrait/ms8nglq3d2b3z-t.jpg",
+          "kind": "image",
+          "title": "IMG 3065",
+          "star": false
+        },
+        {
+          "id": "ms8nh4ykwauey",
+          "src": "media/works/col-portrait/ms8ngsbfbngwn.jpeg",
+          "thumb": "media/works/col-portrait/ms8ngsbfbngwn-t.jpg",
+          "kind": "image",
+          "title": "IMG 3070",
+          "star": false
+        },
+        {
+          "id": "ms8nhb710mqbt",
+          "src": "media/works/col-portrait/ms8nh4yk4gzol.jpeg",
+          "thumb": "media/works/col-portrait/ms8nh4yk4gzol-t.jpg",
+          "kind": "image",
+          "title": "IMG 3066",
+          "star": false
+        },
+        {
+          "id": "ms8nhigyjm0c3",
+          "src": "media/works/col-portrait/ms8nhb71idbh4.jpeg",
+          "thumb": "media/works/col-portrait/ms8nhb71idbh4-t.jpg",
+          "kind": "image",
+          "title": "IMG 3064",
+          "star": false
+        },
+        {
+          "id": "ms8nhonio78vg",
+          "src": "media/works/col-portrait/ms8nhigzq6hnz.jpeg",
+          "thumb": "media/works/col-portrait/ms8nhigzq6hnz-t.jpg",
+          "kind": "image",
+          "title": "IMG 3068",
+          "star": false
+        },
+        {
+          "id": "ms8ni2p5mfpfb",
+          "src": "media/works/col-portrait/ms8nhoniudgqd.jpeg",
+          "thumb": "media/works/col-portrait/ms8nhoniudgqd-t.jpg",
+          "kind": "image",
+          "title": "IMG 3069",
+          "star": false
+        },
+        {
+          "id": "ms8niescdjx5g",
+          "src": "media/works/col-portrait/ms8ni2p5oa4po.jpeg",
+          "thumb": "media/works/col-portrait/ms8ni2p5oa4po-t.jpg",
+          "kind": "image",
+          "title": "IMG 3067",
+          "star": false
+        },
+        {
+          "id": "ms8nip7tbd30p",
+          "src": "media/works/col-portrait/ms8niescy6vdw.jpeg",
+          "thumb": "media/works/col-portrait/ms8niescy6vdw-t.jpg",
+          "kind": "image",
+          "title": "IMG 3071",
+          "star": false
+        },
+        {
+          "id": "ms8nj5ds71kf7",
+          "src": "media/works/col-portrait/ms8nip7tvpsjp.jpeg",
+          "thumb": "media/works/col-portrait/ms8nip7tvpsjp-t.jpg",
+          "kind": "image",
+          "title": "IMG 3072",
+          "star": false
         }
       ]
     },
@@ -232,5 +304,5 @@
       "items": []
     }
   ],
-  "updatedAt": "2026-07-31T07:29:21.059Z"
+  "updatedAt": "2026-07-31T08:00:04.049Z"
 }
