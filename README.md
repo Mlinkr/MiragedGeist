@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| **网址** | **https://gmr2002.github.io/MiragedGeist/** |
-| 仓库 | https://github.com/gmr2002/MiragedGeist |
+| **网址** | **https://Mlink.github.io/MiragedGeist/** |
+| 仓库 | https://github.com/Mlink/MiragedGeist |
 | 部署 | GitHub Pages · main 分支 · 根目录 · 已强制 HTTPS |
 
 任何人点开链接都能浏览，无需登录。你自己编辑只需下面第 1 步。
@@ -28,9 +28,11 @@
 
 ### 2. 连接
 
-打开 https://gmr2002.github.io/MiragedGeist/ → 拉到页面最底部 → 点右下角那个不起眼的**小菱形 ◆**。
+打开 https://Mlink.github.io/MiragedGeist/ → 拉到页面最底部 → 点右下角那个不起眼的**小菱形 ◆**。
 
-owner 和 repo 会自动填好（`gmr2002` / `MiragedGeist`），**你只需要粘贴 Token** → 点「连接仓库」。
+owner 和 repo 会自动从域名推导填好（`Mlink` / `MiragedGeist`），**你只需要粘贴 Token** → 点「连接仓库」。
+
+> 账号改名后无需重新连接：站点会按新域名自动识别 owner，原 Token（同账号）继续有效。
 
 之后就能改头像、背景、简介，加社媒卡片，建专栏传作品。改完点顶部 **「发布到线上」**，约 30 秒后所有访客都能看到新内容。
 
@@ -136,15 +138,19 @@ CRF 数值越大文件越小（23 高质量 / 26 均衡 / 30 小体积）。一�
 
 ## 四、绑定自己的域名（可选）
 
-### 方案 A：改用户名，免费拿到 `miragedgeist.github.io`
+### 方案 A：改 GitHub 账号用户名
 
-经查 **GitHub 用户名 `MiragedGeist` 目前无人注册**。改名后网址会变成最干净的形式：
+仓库名保持 `MiragedGeist` 不变，只改**账号用户名**为 `Mlink`，项目页地址即变为：
 
-1. https://github.com/settings/admin → Change username → 改成 `MiragedGeist`
-2. 把仓库 `MiragedGeist` 改名为 `MiragedGeist.github.io`（Settings → 顶部 Repository name）
-3. 网址即变为 **https://miragedgeist.github.io/**
+**https://Mlink.github.io/MiragedGeist/**
 
-代价：另一个仓库 `Study-room` 的地址会跟着变（GitHub 会自动做旧链接跳转，但 git remote 需要更新）。改名随时可做，早做早省事。
+步骤（账号改名只能在 GitHub 网页端做，没有 API）：
+
+1. 右上角头像 → **Settings** → **Account** → **Change username**
+2. 输入 `Mlink`（若已被占用需换一个），确认
+3. 原 `gmr2002.github.io/MiragedGeist` 会在一段时间内自动跳转到新地址
+
+> 本项目已做兼容：账号改名后，站点按新域名自动识别 owner，原 Token 仍属于同一账号、继续有效，**发布功能无需手动重连**。旧仓库地址的旧链接 GitHub 也会自动做跳转。
 
 ### 方案 B：买自己的域名 `miragedgeist.com`
 
@@ -152,7 +158,7 @@ CRF 数值越大文件越小（23 高质量 / 26 均衡 / 30 小体积）。一�
 
 1. 域名商后台加解析：
    - `A` 记录 `@` → `185.199.108.153`、`185.199.109.153`、`185.199.110.153`、`185.199.111.153`（四条都加）
-   - `CNAME` 记录 `www` → `gmr2002.github.io`
+   - `CNAME` 记录 `www` → `Mlink.github.io`
 2. 仓库 Settings → Pages → Custom domain 填入域名 → Save
 3. 等 DNS 生效（几分钟到几小时），回来勾上 **Enforce HTTPS**
 

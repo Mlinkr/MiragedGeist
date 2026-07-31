@@ -100,7 +100,11 @@ export const gh = {
 function loadCfg() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { /* ignore */ }
-  return { ...guessRepo(), branch: 'main', ...saved };
+  const guessed = guessRepo();
+  // 在 GitHub Pages 上，owner/repo 由域名决定；账号改名后从域名自动适配，
+  // 只保留已保存的 token 与 branch，发布功能无需手动重连。
+  const ownerRepo = guessed.owner ? guessed : { owner: saved.owner || '', repo: saved.repo || '' };
+  return { ...ownerRepo, branch: saved.branch || 'main', token: saved.token || '' };
 }
 
 /** 从当前地址猜测 owner/repo，省去手填 */
