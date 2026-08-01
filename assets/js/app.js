@@ -187,7 +187,7 @@ function tile(kind, it, onClick) {
 
 /* ============ 影视Cut 渲染 ============ */
 
-/** 首页：展示前 3 部影视 */
+/** 首页：展示前 4 部影视 */
 function paintFilmHome() {
   const host = $('#filmHome');
   host.innerHTML = '';
@@ -197,7 +197,7 @@ function paintFilmHome() {
       store.editing ? '还没有影视，点右上角「+ 添加影视」' : '影视资料整理中'));
     return;
   }
-  list.slice(0, 3).forEach(f => host.append(filmCard(f)));
+  list.slice(0, 4).forEach(f => host.append(filmCard(f)));
 }
 
 function truncate(s = '', n = 50) {
