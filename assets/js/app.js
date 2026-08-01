@@ -292,6 +292,8 @@ const DETAIL_PAGE_SIZE = 30;   // 每页 30 张（3 张/行 × 10 行）
 /* ============ 影视Cut ============ */
 
 let workSearchTerm = '';
+let workPage = 0;             // 修图产出首页当前页码（0 基）
+const WORK_PAGE_SIZE = 3;     // 修图产出首页每页 3 个专栏
 let filmSearchTerm = '';
 let filmListPage = 0;          // 影视列表当前页码（0 基）
 const FILM_PAGE_SIZE = 30;     // 影视列表每页 30 部，超过则分页
@@ -612,6 +614,7 @@ async function init() {
   // 修图产出：专栏名搜索
   $('#workSearch').addEventListener('input', e => {
     workSearchTerm = e.target.value.trim();
+    workPage = 0;
     renderCollections('works', $('#workCollections'));
   });
   // 影视Cut：返回 / 搜索 / 添加 / 弹层关闭
