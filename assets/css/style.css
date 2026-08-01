@@ -19,8 +19,9 @@
   --radius:20px;
   --radius-s:13px;
   --shadow:0 22px 60px -20px rgba(0,0,0,.20);
-  --ff:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,sans-serif;
-  --ff-heading:"STSong","SimSun","Noto Serif SC",serif;
+  /* 字体：英文用 Bodoni Moda（博多尼体），中文用 霞鹜铭心宋（LXGW Heart Serif） */
+  --ff:"Bodoni Moda","LXGW Heart Serif","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  --ff-heading:"Bodoni Moda","LXGW Heart Serif","STSong","SimSun","Noto Serif SC",serif;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
