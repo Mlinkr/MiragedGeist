@@ -882,7 +882,152 @@
       "id": "msah6nv8aljut",
       "title": "迪丽热巴",
       "desc": "",
-      "items": []
+      "items": [
+        {
+          "id": "msahdv2d57o8y",
+          "src": "media/works/msah6nv8aljut/msahdiin51vaw.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahdiin51vaw-t.jpg",
+          "kind": "image",
+          "title": "IMG 1372",
+          "star": true
+        },
+        {
+          "id": "msahec1ctbsey",
+          "src": "media/works/msah6nv8aljut/msahdv2ev2d9p.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahdv2ev2d9p-t.jpg",
+          "kind": "image",
+          "title": "IMG 1370",
+          "star": true
+        },
+        {
+          "id": "msahem37h9j6k",
+          "src": "media/works/msah6nv8aljut/msahec1cr2gfp.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahec1cr2gfp-t.jpg",
+          "kind": "image",
+          "title": "IMG 1369",
+          "star": true
+        },
+        {
+          "id": "msahewcy1o9ky",
+          "src": "media/works/msah6nv8aljut/msahem37995jb.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahem37995jb-t.jpg",
+          "kind": "image",
+          "title": "IMG 1371",
+          "star": false
+        },
+        {
+          "id": "msahf300fw3x1",
+          "src": "media/works/msah6nv8aljut/msahewcyxekgf.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahewcyxekgf-t.jpg",
+          "kind": "image",
+          "title": "IMG 1362",
+          "star": false
+        },
+        {
+          "id": "msahf9pyquewm",
+          "src": "media/works/msah6nv8aljut/msahf300bfzl9.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahf300bfzl9-t.jpg",
+          "kind": "image",
+          "title": "IMG 1361",
+          "star": false
+        },
+        {
+          "id": "msahfhar2snzr",
+          "src": "media/works/msah6nv8aljut/msahf9pzqlp8b.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahf9pzqlp8b-t.jpg",
+          "kind": "image",
+          "title": "IMG 1359",
+          "star": false
+        },
+        {
+          "id": "msahfo3dxutuk",
+          "src": "media/works/msah6nv8aljut/msahfhar16pj7.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahfhar16pj7-t.jpg",
+          "kind": "image",
+          "title": "IMG 1360",
+          "star": false
+        },
+        {
+          "id": "msahfvrae8tof",
+          "src": "media/works/msah6nv8aljut/msahfo3d9y4ov.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahfo3d9y4ov-t.jpg",
+          "kind": "image",
+          "title": "IMG 1358",
+          "star": false
+        },
+        {
+          "id": "msahgmux2qjl7",
+          "src": "media/works/msah6nv8aljut/msahgfxxxf699.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahgfxxxf699-t.jpg",
+          "kind": "image",
+          "title": "IMG 1357",
+          "star": false
+        },
+        {
+          "id": "msahgw2ua2nbj",
+          "src": "media/works/msah6nv8aljut/msahgmuyds7le.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahgmuyds7le-t.jpg",
+          "kind": "image",
+          "title": "IMG 1356",
+          "star": false
+        },
+        {
+          "id": "msahh2nswycoo",
+          "src": "media/works/msah6nv8aljut/msahgw2ug9iax.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahgw2ug9iax-t.jpg",
+          "kind": "image",
+          "title": "IMG 1355",
+          "star": false
+        },
+        {
+          "id": "msahh9rs98nz8",
+          "src": "media/works/msah6nv8aljut/msahh2nswg86n.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahh2nswg86n-t.jpg",
+          "kind": "image",
+          "title": "IMG 1354",
+          "star": false
+        },
+        {
+          "id": "msahhgqnszlpc",
+          "src": "media/works/msah6nv8aljut/msahh9rs9wfjp.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahh9rs9wfjp-t.jpg",
+          "kind": "image",
+          "title": "IMG 1353",
+          "star": false
+        },
+        {
+          "id": "msahhnftsnjp7",
+          "src": "media/works/msah6nv8aljut/msahhgqn2yrbl.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahhgqn2yrbl-t.jpg",
+          "kind": "image",
+          "title": "IMG 1352",
+          "star": false
+        },
+        {
+          "id": "msahhy11yr1sm",
+          "src": "media/works/msah6nv8aljut/msahhnftj5rrh.png",
+          "thumb": "media/works/msah6nv8aljut/msahhnftj5rrh-t.jpg",
+          "kind": "image",
+          "title": "IMG 1351",
+          "star": false
+        },
+        {
+          "id": "msahi609xinpz",
+          "src": "media/works/msah6nv8aljut/msahhy12jfg24.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahhy12jfg24-t.jpg",
+          "kind": "image",
+          "title": "IMG 1350",
+          "star": false
+        },
+        {
+          "id": "msahidtv4wl4x",
+          "src": "media/works/msah6nv8aljut/msahi609u9vrs.jpeg",
+          "thumb": "media/works/msah6nv8aljut/msahi609u9vrs-t.jpg",
+          "kind": "image",
+          "title": "IMG 1349",
+          "star": false
+        }
+      ]
     },
     {
       "id": "ms92t7bf36gbo",
@@ -1145,5 +1290,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-01T14:40:37.019Z"
+  "updatedAt": "2026-08-01T14:46:48.610Z"
 }
