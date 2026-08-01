@@ -39,6 +39,7 @@ export const DEFAULT_DATA = {
     { id: 'col-commercial', title: '商业修图', desc: '', items: [] },
     { id: 'col-film', title: '短片', desc: '', items: [] },
   ],
+  films: [],
   updatedAt: '',
 };
 
@@ -88,6 +89,10 @@ export const store = {
     // 兼容旧路由旧代码，兜底查 works
     return (this.data.works || []).find(c => c.id === id);
   },
+
+  findFilm(id) {
+    return (this.data.films || []).find(f => f.id === id);
+  },
 };
 
 function migrate(json) {
@@ -121,10 +126,27 @@ function migrate(json) {
   }
   for (const c of d.works) c.items = Array.isArray(c.items) ? c.items : [];
 
+  // 影视板块
+  d.films = Array.isArray(json.films) ? json.films.map(normFilm) : [];
+
   // 清理旧字段
   delete d.photos;
   delete d.videos;
   return d;
+}
+
+/** 规范化单部影视对象，保证结构完整 */
+function normFilm(f) {
+  if (!f || typeof f !== 'object') return { id: uid(), title: '未命名影视', desc: '', image: '', links: [] };
+  return {
+    id: f.id || uid(),
+    title: f.title || '',
+    desc: f.desc || '',
+    image: f.image || '',
+    links: Array.isArray(f.links)
+      ? f.links.map(l => ({ name: (l && l.name) || '', url: (l && l.url) || '' })).filter(l => l.name || l.url)
+      : [],
+  };
 }
 
 /** 随机取 n 张作品作为首页展示 */

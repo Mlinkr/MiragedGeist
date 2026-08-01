@@ -11,6 +11,7 @@ export function renderAll() {
   renderBio();
   renderSocials();
   renderCollections('works', $('#workCollections'));
+  paintFilmHome();
   $('#year').textContent = new Date().getFullYear();
   $('#footMark').textContent = store.data.profile.name || 'MiragedGeist';
   document.title = store.data.profile.name || 'MiragedGeist';
@@ -95,10 +96,15 @@ function socialCard(s, idx) {
 
 function renderCollections(kind, host) {
   host.innerHTML = '';
-  const list = store.data[kind] || [];
+  let list = store.data[kind] || [];
+  // 修图产出：按专栏名搜索过滤（定位到相关专栏）
+  if (kind === 'works' && workSearchTerm) {
+    const t = workSearchTerm.toLowerCase();
+    list = list.filter(c => (c.title || '').toLowerCase().includes(t));
+  }
   if (!list.length) {
     host.append(el('div', { class: 'empty' },
-      store.editing ? '还没有专栏，点右上角「新建专栏」开始' : '作品整理中'));
+      workSearchTerm ? '没有匹配的专栏' : (store.editing ? '还没有专栏，点右上角「新建专栏」开始' : '作品整理中')));
     return;
   }
   list.forEach(col => host.append(collectionCard(kind, col)));
@@ -179,11 +185,117 @@ function tile(kind, it, onClick) {
   );
 }
 
+/* ============ 影视Cut 渲染 ============ */
+
+/** 首页：展示前 3 部影视 */
+function paintFilmHome() {
+  const host = $('#filmHome');
+  host.innerHTML = '';
+  const list = store.data.films || [];
+  if (!list.length) {
+    host.append(el('div', { class: 'empty', style: 'grid-column:1/-1' },
+      store.editing ? '还没有影视，点右上角「+ 添加影视」' : '影视资料整理中'));
+    return;
+  }
+  list.slice(0, 3).forEach(f => host.append(filmCard(f)));
+}
+
+function truncate(s = '', n = 50) {
+  s = String(s).replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function filmCard(film) {
+  const img = el('img', {
+    src: film.image || placeholder('影视', 600, 800),
+    loading: 'lazy', referrerpolicy: 'no-referrer', alt: film.title || '',
+  });
+  return el('div', { class: 'film-card' },
+    el('div', { class: 'film-thumb', onclick: () => openFilmModal(film) },
+      img,
+      el('span', { class: 'film-play', title: '查看详情' }, '▦'),
+      store.editing ? el('div', { class: 'film-tools' },
+        el('button', { class: 'mini-btn', title: '编辑', onclick: e => { e.stopPropagation(); admin.openFilmForm(film); } }, '✎'),
+        el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeFilm(film.id); } }, '✕')
+      ) : null
+    ),
+    el('div', { class: 'film-meta' },
+      el('div', { class: 'film-title' }, film.title || '未命名影视'),
+      film.desc ? el('div', { class: 'film-desc' }, truncate(film.desc, 44)) : null
+    )
+  );
+}
+
+/** 影视Cut 列表：全部 + 搜索 + 分页（>30 分页） */
+function paintFilmsList() {
+  const list = (store.data.films || [])
+    .filter(f => !filmSearchTerm || (f.title || '').toLowerCase().includes(filmSearchTerm.toLowerCase()));
+  const grid = $('#filmList');
+  grid.innerHTML = '';
+
+  const totalPages = list.length ? Math.ceil(list.length / FILM_PAGE_SIZE) : 1;
+  if (filmListPage >= totalPages) filmListPage = totalPages - 1;
+  if (filmListPage < 0) filmListPage = 0;
+  const start = filmListPage * FILM_PAGE_SIZE;
+  const pageItems = list.slice(start, start + FILM_PAGE_SIZE);
+
+  $('#filmEmpty').hidden = list.length > 0;
+  if (!list.length) $('#filmEmpty').textContent = filmSearchTerm ? '没有匹配的影视' : (store.editing ? '还没有影视，点右上角「+ 添加影视」' : '还没有影视资料');
+
+  pageItems.forEach(f => grid.append(filmCard(f)));
+  renderPager($('#filmPager'), totalPages, filmListPage, p => { filmListPage = p; paintFilmsList(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+}
+
+/* ============ 影视信息弹层 ============ */
+
+function openFilmModal(film) {
+  filmModalFilm = film;
+  const box = $('#filmbox');
+  $('#filmboxImg').src = film.image || placeholder('影视', 600, 800);
+  $('#filmboxImg').alt = film.title || '';
+  $('#filmboxImg').referrerPolicy = 'no-referrer';
+  $('#filmboxTitle').textContent = film.title || '未命名影视';
+  $('#filmboxDesc').innerHTML = md2html(film.desc || '');
+  $$('#filmboxDesc a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+  const links = $('#filmboxLinks');
+  links.innerHTML = '';
+  const usable = (film.links || []).filter(l => l.url);
+  if (!usable.length) {
+    links.append(el('div', { class: 'hint' }, '暂无网盘资源链接'));
+  } else {
+    usable.forEach(l => {
+      links.append(el('a', {
+        class: 'netdisk-link', href: l.url, target: '_blank', rel: 'noopener',
+        title: '打开 / 保存' + (l.name ? '「' + l.name + '」' : '') + '资源',
+      },
+        el('span', { class: 'nd-name' }, l.name || '资源链接'),
+        el('span', { class: 'nd-go' }, '保存 / 打开 ↗')
+      ));
+    });
+  }
+  box.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeFilmModal() {
+  $('#filmbox').hidden = true;
+  $('#filmboxImg').src = '';
+  filmModalFilm = null;
+  document.body.style.overflow = '';
+}
+
 /* ============ 专栏详情 ============ */
 
 let currentDetail = null;
 let detailPage = 0;            // 详情页当前页码（0 基）
 const DETAIL_PAGE_SIZE = 30;   // 每页 30 张（3 张/行 × 10 行）
+
+/* ============ 影视Cut ============ */
+
+let workSearchTerm = '';
+let filmSearchTerm = '';
+let filmListPage = 0;          // 影视列表当前页码（0 基）
+const FILM_PAGE_SIZE = 30;     // 影视列表每页 30 部，超过则分页
+let filmModalFilm = null;      // 当前弹层展示的影视对象
 
 function renderDetail(kind, id) {
   const col = store.findCollection(kind, id);
@@ -257,7 +369,7 @@ function paintDetailGrid() {
     grid.append(node);
   });
 
-  renderPager($('#detailPager'), totalPages, detailPage);
+  renderPager($('#detailPager'), totalPages, detailPage, p => { detailPage = p; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
 }
 
 /** 弹出选择器：把某件作品移动到其它专栏 */
@@ -281,7 +393,7 @@ function openMovePicker(itemId, fromColId) {
   );
   openDrawer('移动作品到其它专栏', node);
 }
-function renderPager(pager, totalPages, current) {
+function renderPager(pager, totalPages, current, onSelect) {
   pager.hidden = totalPages <= 1;
   pager.innerHTML = '';
   if (totalPages <= 1) return;
@@ -290,7 +402,7 @@ function renderPager(pager, totalPages, current) {
     class: 'pg-btn' + (current === 0 ? ' disabled' : ''),
     disabled: current === 0 ? 'disabled' : null,
     'aria-label': '上一页',
-    onclick: () => { detailPage = current - 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+    onclick: () => { if (current > 0) onSelect(current - 1); },
   }, '‹'));
 
   pageNumbers(current, totalPages).forEach(n => {
@@ -301,7 +413,7 @@ function renderPager(pager, totalPages, current) {
       pager.append(el('button', {
         class: 'pg-btn' + (on ? ' on' : ''),
         'aria-label': `第 ${n} 页`,
-        onclick: () => { detailPage = n - 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+        onclick: () => onSelect(n - 1),
       }, String(n)));
     }
   });
@@ -310,7 +422,7 @@ function renderPager(pager, totalPages, current) {
     class: 'pg-btn' + (current === totalPages - 1 ? ' disabled' : ''),
     disabled: current === totalPages - 1 ? 'disabled' : null,
     'aria-label': '下一页',
-    onclick: () => { detailPage = current + 1; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+    onclick: () => { if (current < totalPages - 1) onSelect(current + 1); },
   }, '›'));
 }
 
@@ -436,6 +548,19 @@ function route() {
     window.scrollTo(0, 0);
     return;
   }
+  // 影视Cut 列表
+  const f = h.match(/^#\/films$/);
+  if (f) {
+    $('#view-home').hidden = true;
+    $('#view-detail').hidden = true;
+    $('#view-films').hidden = false;
+    filmListPage = 0;
+    filmSearchTerm = '';
+    const fs = $('#filmSearch'); if (fs) fs.value = '';
+    paintFilmsList();
+    window.scrollTo(0, 0);
+    return;
+  }
   // 兼容旧版路由，自动重定向到新路由
   const old = h.match(/^#\/c\/(photos|videos)\/(.+)$/);
   if (old) {
@@ -451,6 +576,7 @@ function route() {
 export function refresh() {
   renderAll();
   if (currentDetail) renderDetail(currentDetail.kind, currentDetail.id);
+  if (!$('#view-films').hidden) paintFilmsList();
 }
 
 /* ============ 启动 ============ */
@@ -469,6 +595,10 @@ async function init() {
   $('#lbNext').onclick = () => step(1);
   $('#lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') closeLightbox(); });
   document.addEventListener('keydown', e => {
+    if (!$('#filmbox').hidden) {
+      if (e.key === 'Escape') closeFilmModal();
+      return;
+    }
     if ($('#lightbox').hidden) return;
     if (e.key === 'Escape') closeLightbox();
     if (e.key === 'ArrowLeft') step(-1);
@@ -478,6 +608,22 @@ async function init() {
   $('#adminKey').onclick = () => admin.openConsole();
   $$('[data-edit]').forEach(b => b.onclick = () => admin.handleEdit(b.dataset.edit));
   $$('[data-close-drawer]').forEach(b => b.onclick = closeDrawer);
+
+  // 修图产出：专栏名搜索
+  $('#workSearch').addEventListener('input', e => {
+    workSearchTerm = e.target.value.trim();
+    renderCollections('works', $('#workCollections'));
+  });
+  // 影视Cut：返回 / 搜索 / 添加 / 弹层关闭
+  $('#filmsBackBtn').onclick = () => { if (history.length > 1) history.back(); else location.hash = ''; };
+  $('#filmAddBtn').onclick = () => admin.openFilmForm(null);
+  $('#filmSearch').addEventListener('input', e => {
+    filmSearchTerm = e.target.value.trim();
+    filmListPage = 0;
+    paintFilmsList();
+  });
+  $('#filmboxClose').onclick = closeFilmModal;
+  $('#filmbox').addEventListener('click', e => { if (e.target.id === 'filmbox') closeFilmModal(); });
 
   admin.init();
   if (!ok && !store.editing) {

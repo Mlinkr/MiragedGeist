@@ -78,7 +78,21 @@
         <h2>修图产出</h2>
         <button class="btn-ghost edit-only" data-edit="work-add">+ 新建专栏</button>
       </div>
+      <div class="search-bar">
+        <svg class="mag" viewBox="0 0 24 24"><path d="M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="workSearch" type="search" placeholder="搜索专栏名称…" autocomplete="off" />
+      </div>
       <div class="collections" id="workCollections"></div>
+    </section>
+
+    <!-- 影视Cut -->
+    <section class="sec" id="sec-films">
+      <div class="sec-head">
+        <h2>影视Cut</h2>
+        <a class="col-more" href="#/films" title="查看全部">查看全部 →</a>
+        <button class="btn-ghost edit-only" data-edit="film-add">+ 添加影视</button>
+      </div>
+      <div class="film-grid" id="filmHome"></div>
     </section>
 
     <footer class="foot">
@@ -113,6 +127,32 @@
   </div>
 </main>
 
+<!-- ============ 影视Cut 列表 ============ -->
+<main id="view-films" class="view" hidden>
+  <div class="page detail-page">
+    <button class="back-btn" id="filmsBackBtn">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      返回
+    </button>
+    <div class="detail-head">
+      <div class="detail-title-row">
+        <h1>影视Cut</h1>
+      </div>
+      <p>影视资料与网盘资源</p>
+      <div class="detail-tools edit-only">
+        <button class="btn-solid" id="filmAddBtn">+ 添加影视</button>
+      </div>
+    </div>
+    <div class="search-bar">
+      <svg class="mag" viewBox="0 0 24 24"><path d="M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="filmSearch" type="search" placeholder="搜索影视名…" autocomplete="off" />
+    </div>
+    <div class="film-grid" id="filmList"></div>
+    <div class="pager" id="filmPager" hidden></div>
+    <div class="empty" id="filmEmpty" hidden>还没有影视资料</div>
+  </div>
+</main>
+
 <!-- ============ 灯箱 ============ -->
 <div class="lightbox" id="lightbox" hidden>
   <button class="lb-close" id="lbClose">✕</button>
@@ -120,6 +160,19 @@
   <button class="lb-nav next" id="lbNext">›</button>
   <div class="lb-stage" id="lbStage"></div>
   <div class="lb-cap" id="lbCap"></div>
+</div>
+
+<!-- ============ 影视信息弹层 ============ -->
+<div class="filmbox" id="filmbox" hidden>
+  <button class="lb-close" id="filmboxClose">✕</button>
+  <div class="filmbox-panel">
+    <img class="filmbox-img" id="filmboxImg" alt="" />
+    <div class="filmbox-main">
+      <h3 id="filmboxTitle"></h3>
+      <div class="filmbox-desc" id="filmboxDesc"></div>
+      <div class="filmbox-links" id="filmboxLinks"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ============ 管理抽屉 ============ -->

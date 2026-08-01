@@ -174,6 +174,7 @@ export function handleEdit(key) {
     case 'bio': return openProfileForm();
     case 'social-add': return openSocialForm(null);
     case 'work-add': return openCollectionForm(null);
+    case 'film-add': return openFilmForm(null);
   }
 }
 
@@ -433,6 +434,98 @@ export async function removeCollection(kind, id) {
   changed();
   if (location.hash.includes(id)) location.hash = '';
   toast('专栏已删除', 'ok');
+}
+
+/* ================= 影视Cut ================= */
+
+export function openFilmForm(existing) {
+  const f = existing || { id: uid(), title: '', desc: '', image: '', links: [] };
+  const box = el('div');
+
+  const titleIn = input({ id: 'f_title', value: f.title, placeholder: '影视名称' });
+  const descIn = textarea({ id: 'f_desc', rows: 5, placeholder: '影视相关说明（支持简易 Markdown）' });
+  descIn.value = f.desc || '';
+
+  const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '' });
+  if (!f.image) imgEl.style.display = 'none';
+  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl) },
+    el('div', {}, f.image ? '点击更换影视图片' : '点击上传影视图片'),
+    el('div', { class: 'hint' }, '海报 / 剧照，建议竖图')
+  );
+
+  // 网盘链接动态列表
+  const linksBox = el('div', { class: 'links-editor' });
+  function addLinkRow(l) {
+    const nameIn = input({ value: (l && l.name) || '', placeholder: '网盘名称，如 百度网盘' });
+    const urlIn = input({ value: (l && l.url) || '', placeholder: '资源链接 https://pan.baidu.com/...' });
+    const row = el('div', { class: 'link-row' },
+      nameIn, urlIn,
+      el('button', { class: 'mini-btn danger', title: '删除此链接', onclick: e => { e.stopPropagation(); row.remove(); } }, '✕')
+    );
+    linksBox.append(row);
+    return row;
+  }
+  const initialLinks = (f.links && f.links.length) ? f.links : [{ name: '百度网盘', url: '' }, { name: '夸克网盘', url: '' }];
+  initialLinks.forEach(addLinkRow);
+  const addLinkBtn = el('button', { class: 'btn-ghost', style: 'width:100%;margin-top:8px', onclick: () => addLinkRow({}) }, '+ 添加网盘链接');
+
+  const act = actions(existing ? '保存修改' : '添加影视', () => {
+    const links = [...linksBox.querySelectorAll('.link-row')]
+      .map(r => { const ins = r.querySelectorAll('input'); return { name: ins[0].value.trim(), url: ins[1].value.trim() }; })
+      .filter(l => l.url || l.name);
+    if (!f.image) return toast('请先上传一张影视图片', 'err');
+    f.title = titleIn.value.trim() || '未命名影视';
+    f.desc = descIn.value;
+    f.links = links;
+    if (!existing) store.data.films.push(f);
+    changed(); closeDrawer();
+    toast(existing ? '已保存，记得发布' : '影视已添加，记得发布', 'ok');
+  });
+
+  if (existing) {
+    act.append(el('button', {
+      class: 'btn-ghost danger', onclick: () => { closeDrawer(); removeFilm(f.id); }
+    }, '删除影视'));
+  }
+
+  box.append(
+    field('影视名', titleIn),
+    field('影视说明', descIn, '支持简易 Markdown：**加粗**、<code>`高亮`</code>、<code>- 列表</code>、<code>[文字](链接)</code>'),
+    field('影视图片', el('div', {}, upZone, imgEl)),
+    field('网盘资源链接', el('div', {}, linksBox, addLinkBtn), '可添加百度网盘、夸克网盘等多个资源链接，访客点击即可跳转保存。'),
+    act
+  );
+  openDrawer(existing ? '编辑影视' : '添加影视', box);
+}
+
+/** 影视图片：连接仓库就上传，否则退化为本地 dataURL */
+async function pickFilmImage(f, imgEl) {
+  const [file] = await pickFiles({ accept: 'image/*' });
+  if (!file) return;
+  busy(true, '上传影视图片…');
+  try {
+    const blob = await compressImage(file, 1400, .92);
+    const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
+    f.image = path;
+    imgEl.src = path; imgEl.style.display = '';
+    toast('图片已选好，保存后生效', 'ok');
+  } catch (e) {
+    toast('上传失败：' + e.message, 'err');
+  } finally {
+    busy(false);
+  }
+}
+
+export async function removeFilm(id) {
+  const f = (store.data.films || []).find(x => x.id === id);
+  if (!f) return;
+  if (!confirmBox('删除这部影视资料？')) return;
+  if (gh.ready && f.image && f.image.startsWith('media/')) {
+    try { await gh.deleteFile(f.image, 'chore: remove film image'); } catch { /* ignore */ }
+  }
+  store.data.films = store.data.films.filter(x => x.id !== id);
+  changed();
+  toast('影视已删除', 'ok');
 }
 
 /* ================= 媒体上传 ================= */
