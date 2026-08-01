@@ -19,9 +19,9 @@
       "handle": "",
       "avatar": "media/social/ms7s8m1bediaa.jpg",
       "stats": [
-        1744,
-        684,
-        724
+        -1,
+        -1,
+        -1
       ],
       "icon": "media/social/ms7s8m1bediaa-icon.jpg"
     },
@@ -949,5 +949,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-01T07:42:41.582Z"
+  "updatedAt": "2026-08-01T07:57:01.187Z"
 }
