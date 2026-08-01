@@ -96,6 +96,8 @@ function socialCard(s, idx) {
 
 function renderCollections(kind, host) {
   host.innerHTML = '';
+  const pager = $('#workPager');
+  if (pager) pager.hidden = true;
   let list = store.data[kind] || [];
   // 修图产出：按专栏名搜索过滤（定位到相关专栏）
   if (kind === 'works' && workSearchTerm) {
@@ -107,7 +109,21 @@ function renderCollections(kind, host) {
       workSearchTerm ? '没有匹配的专栏' : (store.editing ? '还没有专栏，点右上角「新建专栏」开始' : '作品整理中')));
     return;
   }
-  list.forEach(col => host.append(collectionCard(kind, col)));
+  // 修图产出：搜索时展示全部匹配结果；未搜索时分页（3 个/页）
+  let pageItems = list;
+  if (kind === 'works' && !workSearchTerm) {
+    const totalPages = Math.ceil(list.length / WORK_PAGE_SIZE);
+    if (workPage >= totalPages) workPage = totalPages - 1;
+    if (workPage < 0) workPage = 0;
+    const start = workPage * WORK_PAGE_SIZE;
+    pageItems = list.slice(start, start + WORK_PAGE_SIZE);
+    if (totalPages > 1) renderPager(pager, totalPages, workPage, p => {
+      workPage = p;
+      renderCollections('works', host);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+  pageItems.forEach(col => host.append(collectionCard(kind, col)));
 }
 
 function collectionCard(kind, col) {
