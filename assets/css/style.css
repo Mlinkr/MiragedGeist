@@ -71,7 +71,7 @@ p{margin:0}
 .hero-inner{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:82px;
   text-align:center;width:100%;z-index:2}
 
-.avatar-wrap{position:absolute;left:50%;bottom:0;transform:translate(-50%,-50%);
+.avatar-wrap{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);
   width:136px;height:136px;margin:0;z-index:3}
 .avatar-ring{position:absolute;inset:-4px;border-radius:50%;
   background:conic-gradient(from 140deg,var(--accent),var(--accent-2),#d4a79a,var(--accent));
