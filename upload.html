@@ -54,7 +54,7 @@
       <p><b>5.</b> <b>Account ID</b>：R2 概览页 URL 里 <code>cloudflare.com/</code> 后面那串就是；或在账户主页右侧「API」处复制。</p>
       <p><b>6.</b> 创建<b>专用令牌</b>：R2 → <b>管理 R2 API 令牌</b> → <b>创建</b>：权限选 <b>对象读写</b>，范围（Scope）勾选 <b>仅本桶</b>（只动这一个桶，手机丢了也不怕），创建后<b>立刻保存 Access Key ID 和 Secret</b>（Secret 只显示一次）。</p>
       <p><b>7.</b> 回到本页把上面 ① 六项填好（Secret 只存你手机，不上传任何人），填完自动记住，下次免填。</p>
-      <p><b>8.</b> 选图 → <b>上传并生成外链</b> → 复制，再去网站后台「🌐 粘贴外链图片」粘贴即可。</p>
+      <p><b>8.</b> 选图 → <b>上传并生成外链</b> → 点「复制全部外链」，再去网站后台进专栏点「🌐 粘贴外链图片」粘贴即可。每行已是 <code>原图 | 标题 | 缩略图</code> 格式，网格自动用缩略图、点开看原图。</p>
       <p><b>费用：</b>存储约 $0.015/GB·月，免费额度 10GB + 每月 1000万次读取；<b>出站流量免费</b>（正是选 R2 的原因）。你单图≤30MB、上千张基本在免费额度内。</p>
     </div>
   </details>
@@ -62,6 +62,14 @@
   <div class="card">
     <label style="margin-top:0">② 选择图片（可多选）</label>
     <input id="file" type="file" accept="image/*" multiple>
+    <label style="display:flex;align-items:center;gap:8px;color:var(--fg);font-size:13px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="c_thumb" checked style="width:auto;flex:none"> 同时生成高清缩略图（网格用，灯箱看原图）
+    </label>
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1"><label style="margin-top:0">缩略图长边(px)</label><input id="c_tlong" type="number" value="1600" min="200" max="4000"></div>
+      <div style="flex:1"><label style="margin-top:0">质量(%)</label><input id="c_tq" type="number" value="85" min="40" max="100"></div>
+    </div>
+    <div class="tip">缩略图用 <b>JPEG 高质量压缩</b>（长边 1600px / 质量 85），清晰不糊，全平台浏览器都能生成，体积约为原图几分之一。网格加载缩略图、点开看原图，首页不再被 30MB 原图拖慢。</div>
     <div class="bar"><i id="bar"></i></div>
     <button class="primary" id="up">上传并生成外链</button>
     <div class="row" style="margin-top:10px">
@@ -105,59 +113,117 @@ async function signV4({secret, accessKey, region, service, method, uri, headers,
   return `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${sig}`;
 }
 
-async function uploadOne(file, cfg){
-  const cleanPrefix = cfg.prefix ? cfg.prefix.replace(/\/+$/,'') + '/' : '';
-  const rawName = file.name.replace(/\s+/g,'_');
-  const key = cleanPrefix + Date.now() + '_' + rawName;
-  // 逐段 URI 编码路径，兼容中文/特殊字符文件名（S3/R2 规范）
+/* 核心：把一段字节 PUT 到 R2（带 SigV4 签名 + 逐段 URI 编码） */
+async function putObject(key, body, contentType, cfg){
   const encKey = key.split('/').map(encodeURIComponent).join('/');
   const host = `${cfg.account}.r2.cloudflarestorage.com`;
   const uri = `/${cfg.bucket}/${encKey}`;
-  const body = new Uint8Array(await file.arrayBuffer());
-  const payloadHash = await sha256(body);
+  const arr = body instanceof Uint8Array ? body : new Uint8Array(await body.arrayBuffer());
+  const payloadHash = await sha256(arr);
   const amz = amzDate(new Date());
   const headers = {
     'host': host,
     'x-amz-date': amz,
     'x-amz-content-sha256': payloadHash,
-    'content-type': file.type || 'application/octet-stream',
+    'content-type': contentType,
   };
-  const auth = await signV4({ secret:cfg.secret, accessKey:cfg.key, region:'auto', service:'s3', method:'PUT', uri, headers, payload:body });
-  const res = await fetch(`https://${host}${uri}`, { method:'PUT', headers:{ ...headers, 'Authorization':auth }, body });
+  const auth = await signV4({ secret:cfg.secret, accessKey:cfg.key, region:'auto', service:'s3', method:'PUT', uri, headers, payload:arr });
+  const res = await fetch(`https://${host}${uri}`, { method:'PUT', headers:{ ...headers, 'Authorization':auth }, body:arr });
   if(!res.ok) throw new Error('R2 返回 '+res.status);
   return cfg.base.replace(/\/+$/,'') + '/' + encKey;
+}
+
+/* 解码图片，自动按 EXIF 方向修正（手机照片防转歪） */
+async function decodeImage(file){
+  if(typeof createImageBitmap === 'function'){
+    try { return await createImageBitmap(file, { imageOrientation:'from-image' }); } catch {}
+  }
+  return await new Promise((res, rej) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
+    img.src = url;
+  });
+}
+
+/* 生成高质量压缩缩略图（JPEG，全平台浏览器都能编码，清晰不糊） */
+async function makeThumb(file, { maxLong, quality }){
+  const src = await decodeImage(file);
+  const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+  const long = Math.max(w0, h0);
+  let w = w0, h = h0;
+  if(long > maxLong){ const r = maxLong / long; w = Math.max(1, Math.round(w0 * r)); h = Math.max(1, Math.round(h0 * r)); }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, w, h);
+  if(src.close) try { src.close(); } catch {}
+  return await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+}
+
+/* 上传一张：原图必传；缩略图可选（失败不阻塞原图） */
+async function uploadOne(file, cfg, opts = {}){
+  const cleanPrefix = cfg.prefix ? cfg.prefix.replace(/\/+$/,'') + '/' : '';
+  const ts = Date.now();
+  const rawName = file.name.replace(/\s+/g,'_');
+  const baseName = rawName.replace(/\.[^.]+$/, '');
+  const origKey = cleanPrefix + ts + '_' + rawName;
+  const origUrl = await putObject(origKey, file, file.type || 'application/octet-stream', cfg);
+  let thumbUrl = '';
+  if(opts.thumb){
+    try {
+      const blob = await makeThumb(file, opts.thumb);
+      if(blob){
+        const thumbKey = cleanPrefix + 'thumb/' + ts + '_' + baseName + '.jpg';
+        thumbUrl = await putObject(thumbKey, blob, 'image/jpeg', cfg);
+      }
+    } catch(e){ console.warn('缩略图生成失败，已跳过：', e); }
+  }
+  return { origUrl, thumbUrl, title: baseName };
 }
 
 /* ---------- UI ---------- */
 function toast(msg, cls=''){ const t=$('#toast'); t.textContent=msg; t.className='toast show '+cls; setTimeout(()=>t.className='toast', 2600); }
 function loadCfg(){ try{ return JSON.parse(localStorage.getItem('r2cfg')||'{}'); }catch{ return {}; } }
 function saveCfg(c){ localStorage.setItem('r2cfg', JSON.stringify(c)); }
-(function init(){ const c=loadCfg(); ['account','key','secret','bucket','base','prefix'].forEach(k=>{ if(c[k]) $('#c_'+k).value=c[k]; }); })();
+(function init(){ const c=loadCfg(); ['account','key','secret','bucket','base','prefix'].forEach(k=>{ if(c[k]) $('#c_'+k).value=c[k]; }); if(typeof c.thumb==='boolean') $('#c_thumb').checked=c.thumb; if(c.tlong) $('#c_tlong').value=c.tlong; if(c.tq) $('#c_tq').value=c.tq; })();
 
 $('#up').onclick = async ()=>{
   const cfg = { account:$('#c_account').value.trim(), key:$('#c_key').value.trim(), secret:$('#c_secret').value.trim(),
                 bucket:$('#c_bucket').value.trim(), base:$('#c_base').value.trim(), prefix:$('#c_prefix').value.trim() };
   if(!cfg.account||!cfg.key||!cfg.secret||!cfg.bucket||!cfg.base){ toast('请先填完 R2 配置','err'); return; }
+  cfg.thumb = $('#c_thumb').checked;
+  cfg.tlong = Math.max(200, Math.min(4000, parseInt($('#c_tlong').value)||1600));
+  cfg.tq = Math.max(40, Math.min(100, parseInt($('#c_tq').value)||85)) / 100;
   saveCfg(cfg);
   const files = [...$('#file').files];
   if(!files.length){ toast('请先选图片','err'); return; }
-  $('#out').innerHTML=''; let done=0;
+  $('#out').innerHTML='';
+  const total = files.length * (cfg.thumb ? 2 : 1);
+  let done = 0;
   for(const f of files){
     const item=document.createElement('div'); item.className='url'; item.innerHTML='<span>上传中…</span>'; $('#out').prepend(item);
     try{
-      const url = await uploadOne(f, cfg);
-      item.innerHTML = `<span><b>✓</b> ${url}</span>`;
-      const b=document.createElement('button'); b.textContent='复制'; b.onclick=()=>copy(url); item.append(b);
-    }catch(e){ item.innerHTML = `<span class="err">✗ ${f.name}: ${e.message}</span>`; }
-    done++; $('#bar').style.width = (done/files.length*100)+'%';
+      const r = await uploadOne(f, cfg, cfg.thumb ? { thumb:{ maxLong:cfg.tlong, quality:cfg.tq } } : {});
+      // 输出成网站可直接粘贴的格式：原图 | 标题 | 缩略图
+      const line = r.thumbUrl ? `${r.origUrl} | ${r.title} | ${r.thumbUrl}` : `${r.origUrl} | ${r.title}`;
+      item.dataset.line = line;
+      item.innerHTML = `<span><b>✓</b> ${escapeHtml(line)}</span>`;
+      const b=document.createElement('button'); b.textContent='复制'; b.onclick=()=>copy(item.dataset.line); item.append(b);
+      done += cfg.thumb ? 2 : 1;
+    }catch(e){ item.innerHTML = `<span class="err">✗ ${f.name}: ${e.message}</span>`; done += cfg.thumb ? 2 : 1; }
+    $('#bar').style.width = (done/total*100)+'%';
   }
-  toast('完成 '+done+' 张','ok');
+  toast('完成 '+files.length+' 张（原图'+(cfg.thumb?' + 缩略图':'')+'）','ok');
 };
+function escapeHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function copy(t){ navigator.clipboard?.writeText(t).then(()=>toast('已复制','ok'),()=>toast('复制失败','err')); }
 $('#copyAll').onclick = ()=>{
-  const urls=[...document.querySelectorAll('#out .url span')].map(s=>s.textContent.replace(/^[✓✗]\s*/,'')).filter(Boolean);
-  if(!urls.length){ toast('还没有链接','err'); return; }
-  copy(urls.join('\n'));
+  const lines=[...document.querySelectorAll('#out .url')].map(d=>d.dataset.line).filter(Boolean);
+  if(!lines.length){ toast('还没有链接','err'); return; }
+  copy(lines.join('\n'));
 };
 $('#clear').onclick = ()=>{ $('#out').innerHTML='<div class="tip">生成的链接会显示在这里。</div>'; $('#bar').style.width='0'; };
 </script>
