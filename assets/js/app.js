@@ -554,9 +554,9 @@ async function downloadViaBlob(url, filename) {
 
 /* Cloudinary：在 URL 加 fl_attachment 让服务端强制下载（无需 CORS，最稳） */
 function isCloudinaryUrl(u){ return /res\.cloudinary\.com\/.+\/image\/upload\//.test(u || ''); }
-function cloudinaryAttachmentUrl(u, name){
-  const seg = 'fl_attachment:' + (name || 'image');
-  return u.replace('/image/upload/', '/image/upload/' + seg + '/');
+function cloudinaryAttachmentUrl(u){
+  // 注意：fl_attachment 后面用 /，不是 :filename，否则 Cloudinary 返回 400
+  return u.replace('/image/upload/', '/image/upload/fl_attachment/');
 }
 
 function paintLightbox() {
@@ -581,8 +581,8 @@ function paintLightbox() {
   dlBtn.onclick = (e) => {
     e.preventDefault();
     if (isCloudinaryUrl(it.src)) {
-      // 服务端强制下载原图，彻底不依赖 CORS
-      window.open(cloudinaryAttachmentUrl(it.src, downloadName(it, isVideo)), '_blank', 'noopener');
+      // 服务端强制下载原图，彻底不依赖 CORS（Cloudinary 会按 public_id 自动取名）
+      window.open(cloudinaryAttachmentUrl(it.src), '_blank', 'noopener');
     } else {
       downloadViaBlob(it.src, downloadName(it, isVideo)); // GitHub 同域/R2(开CORS) 走 blob 一键下载
     }
