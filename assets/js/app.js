@@ -552,6 +552,13 @@ async function downloadViaBlob(url, filename) {
   }
 }
 
+/* Cloudinary：在 URL 加 fl_attachment 让服务端强制下载（无需 CORS，最稳） */
+function isCloudinaryUrl(u){ return /res\.cloudinary\.com\/.+\/image\/upload\//.test(u || ''); }
+function cloudinaryAttachmentUrl(u, name){
+  const seg = 'fl_attachment:' + (name || 'image');
+  return u.replace('/image/upload/', '/image/upload/' + seg + '/');
+}
+
 function paintLightbox() {
   const it = lbItems[lbIndex];
   if (!it) return;
@@ -571,7 +578,15 @@ function paintLightbox() {
     target: '_blank',
     rel: 'noopener',
   }, isVideo ? '下载原视频' : '下载原图');
-  dlBtn.onclick = (e) => { e.preventDefault(); downloadViaBlob(it.src, downloadName(it, isVideo)); };
+  dlBtn.onclick = (e) => {
+    e.preventDefault();
+    if (isCloudinaryUrl(it.src)) {
+      // 服务端强制下载原图，彻底不依赖 CORS
+      window.open(cloudinaryAttachmentUrl(it.src, downloadName(it, isVideo)), '_blank', 'noopener');
+    } else {
+      downloadViaBlob(it.src, downloadName(it, isVideo)); // GitHub 同域/R2(开CORS) 走 blob 一键下载
+    }
+  };
   cap.append(dlBtn);
   const multi = lbItems.length > 1;
   $('#lbPrev').hidden = !multi; $('#lbNext').hidden = !multi;
