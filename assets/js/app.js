@@ -330,6 +330,7 @@ function renderDetail(kind, id) {
   $('#detailDesc').textContent = col.desc || '';
 
   $('#detailUpload').onclick = () => admin.uploadTo(kind, id);
+  $('#detailAddUrl').onclick = () => admin.addRemoteImages(kind, id);
   $('#detailEdit').onclick = () => admin.openCollectionForm(col);
   $('#detailDelete').onclick = () => admin.removeCollection(kind, id);
 
@@ -367,6 +368,7 @@ function paintDetailGrid() {
         el('button', { class: 'mini-btn', title: '设为精选', onclick: e => { e.stopPropagation(); admin.toggleStar(currentDetail.kind, currentDetail.id, it.id); } }, it.star ? '★' : '☆'),
         el('button', { class: 'mini-btn', title: '移动到其它专栏', onclick: e => { e.stopPropagation(); openMovePicker(it.id, currentDetail.id); } }, '⇄'),
         el('button', { class: 'mini-btn', title: '改标题', onclick: e => { e.stopPropagation(); admin.renameItem(currentDetail.kind, currentDetail.id, it.id); } }, '✎'),
+        el('button', { class: 'mini-btn', title: '改图片链接（外链/站内）', onclick: e => { e.stopPropagation(); admin.editItemUrl(currentDetail.kind, currentDetail.id, it.id); } }, '🔗'),
         el('button', { class: 'mini-btn danger', title: '删除', onclick: e => { e.stopPropagation(); admin.removeItem(currentDetail.kind, currentDetail.id, it.id); } }, '✕')
       )
     );

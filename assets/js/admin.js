@@ -621,6 +621,71 @@ export function removeItem(kind, colId, itemId) {
   }
 }
 
+/* 是否为远程地址（http/https）；否则视为站内相对路径 */
+function isRemoteUrl(u) { return /^https?:\/\//i.test((u || '').trim()); }
+
+/**
+ * 添加外链图片：粘贴 URL（每行一个，支持 `url | 标题 | 缩略图url`）。
+ * 外链图片直接由浏览器从图床/CDN 加载，不经过 GitHub，不占仓库空间、不耗 Pages 月流量，
+ * 因此适合放成百上千张高清原图（单张 ≤100MB 都没问题）。
+ */
+export function addRemoteImages(kind, colId) {
+  const col = store.findCollection(kind, colId) || store.findCollection('works', colId);
+  if (!col) return;
+  const ta = textarea({
+    id: 'remoteUrls', rows: 9,
+    placeholder: '每行一个图片链接，例如：\nhttps://your-cdn.com/col/a.jpg\nhttps://your-cdn.com/col/b.jpg | 作品标题\nhttps://your-cdn.com/col/c.jpg | 标题 | https://your-cdn.com/col/c-t.jpg',
+  });
+  const content = el('div', {},
+    field('粘贴外链图片链接', ta,
+      '每行一个图片地址。可用 <code>|</code> 分隔填写「标题」与「缩略图地址」。<br>' +
+      '<b>外链图片直接从你的图床 / CDN 加载，不经过 GitHub，不占仓库空间、不耗 Pages 月流量</b>，' +
+      '适合放成百上千张高清原图（单张 ≤100MB 都没问题）。'),
+  );
+  const done = actions('添加', () => {
+    const lines = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return toast('请先粘贴至少一个链接', 'err');
+    let added = 0, skipped = 0;
+    for (const line of lines) {
+      const parts = line.split('|').map(s => s.trim());
+      const src = parts[0];
+      if (!src) { skipped++; continue; }
+      if (!isRemoteUrl(src) && !/^(media\/|\.\/|\/)/.test(src)) { skipped++; continue; }
+      const title = parts[1] || '';
+      const thumb = parts[2] || '';
+      col.items.push({
+        id: uid(),
+        src,
+        thumb: thumb || '',
+        kind: 'image',
+        title: title || cleanName(src.split('?')[0].split('/').pop() || '作品'),
+        star: col.items.length < 3,
+      });
+      added++;
+    }
+    changed();
+    closeDrawer();
+    toast(added ? `已添加 ${added} 张外链图片${skipped ? `（${skipped} 行无效已跳过）` : ''}` : '没有有效的图片链接', added ? 'ok' : 'err');
+  });
+  openDrawer('🌐 粘贴外链图片', el('div', {}, content, done));
+}
+
+/** 修改某件作品的图片链接（支持外链 https://… 或站内 media/… 路径） */
+export function editItemUrl(kind, colId, itemId) {
+  const col = store.findCollection('works', colId);
+  const it = col?.items.find(i => i.id === itemId);
+  if (!it) return;
+  const src = window.prompt('图片地址（外链填 https://…，站内填 media/… 路径）', it.src || '');
+  if (src === null) return;
+  const thumb = window.prompt('缩略图地址（可留空；留空则使用原图作为缩略图）', it.thumb || '');
+  if (thumb === null) return;
+  it.src = src.trim();
+  it.thumb = (thumb.trim() || '');
+  if (!it.kind) it.kind = 'image';
+  changed();
+  toast('链接已更新', 'ok');
+}
+
 /** 移动作品到其它专栏：从源专栏移除、追加到目标专栏 */
 export function moveItem(kind, fromColId, itemId, toColId) {
   if (!fromColId || !toColId || fromColId === toColId) return;
