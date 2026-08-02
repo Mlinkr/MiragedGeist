@@ -120,7 +120,7 @@ function renderCollections(kind, host) {
     if (totalPages > 1) renderPager(pager, totalPages, workPage, p => {
       workPage = p;
       renderCollections('works', host);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // 翻页不跳顶，保持当前滚动位置
     });
   }
   pageItems.forEach(col => host.append(collectionCard(kind, col)));
@@ -259,7 +259,7 @@ function paintFilmsList() {
   if (!list.length) $('#filmEmpty').textContent = filmSearchTerm ? '没有匹配的影视' : (store.editing ? '还没有影视，点右上角「+ 添加影视」' : '还没有影视资料');
 
   pageItems.forEach(f => grid.append(filmCard(f)));
-  renderPager($('#filmPager'), totalPages, filmListPage, p => { filmListPage = p; paintFilmsList(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  renderPager($('#filmPager'), totalPages, filmListPage, p => { filmListPage = p; paintFilmsList(); }); // 翻页不跳顶，保持当前滚动位置
 }
 
 /* ============ 影视信息弹层 ============ */
@@ -389,7 +389,7 @@ function paintDetailGrid() {
     grid.append(node);
   });
 
-  renderPager($('#detailPager'), totalPages, detailPage, p => { detailPage = p; paintDetailGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  renderPager($('#detailPager'), totalPages, detailPage, p => { detailPage = p; paintDetailGrid(); }); // 翻页不跳顶，保持当前滚动位置
 }
 
 /** 弹出选择器：把某件作品移动到其它专栏 */
