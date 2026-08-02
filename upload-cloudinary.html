@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手机直传 Cloudinary · 生成图片外链</title>
+<style>
+  :root{ --bg:#16121f; --card:#221a30; --fg:#ece8f5; --mut:#a99fc0; --acc:#8b6cf0; --ok:#39d98a; --err:#ff6b81; --bd:#352a4a; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; padding:14px; }
+  h1{ font-size:18px; margin:4px 0 2px; } .sub{ color:var(--mut); font-size:12px; margin-bottom:12px; line-height:1.5; }
+  .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; margin-bottom:12px; }
+  label{ display:block; font-size:12px; color:var(--mut); margin:10px 0 4px; }
+  input{ width:100%; padding:11px; border-radius:10px; border:1px solid var(--bd); background:#1a1426; color:var(--fg); font-size:14px; }
+  input:focus{ outline:none; border-color:var(--acc); }
+  button{ width:100%; padding:13px; border:0; border-radius:11px; font-size:15px; font-weight:600; margin-top:10px; cursor:pointer; }
+  .primary{ background:var(--acc); color:#fff; } .ghost{ background:#2c2240; color:var(--fg); }
+  .row{ display:flex; gap:8px; } .row button{ margin-top:0; }
+  .tip{ font-size:11px; color:var(--mut); line-height:1.5; margin-top:6px; }
+  .bar{ height:6px; background:#1a1426; border-radius:4px; overflow:hidden; margin-top:6px; }
+  .bar > i{ display:block; height:100%; width:0; background:var(--ok); transition:width .2s; }
+  .url{ display:flex; gap:8px; align-items:center; background:#1a1426; border:1px solid var(--bd); border-radius:9px; padding:8px 10px; margin-top:8px; font-size:12px; word-break:break-all; }
+  .url b{ color:var(--ok); }
+  .url button{ width:auto; margin:0; padding:6px 10px; font-size:12px; background:var(--acc); color:#fff; border-radius:8px; flex:none; }
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000a; padding:10px 16px; border-radius:10px; font-size:13px; opacity:0; transition:.3s; max-width:90%; }
+  .toast.show{ opacity:1; } .err{ color:var(--err); } .ok{ color:var(--ok); }
+  details summary{ cursor:pointer; color:var(--mut); font-size:13px; }
+  code{ background:#1a1426; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>📤 手机直传 Cloudinary 图床</h1>
+  <div class="sub">选图 → 直传 Cloudinary（<strong>免费、不用绑卡</strong>）→ 生成外链，粘到网站后台「🌐 粘贴外链图片」。
+  原图与缩略图都按同一张图实时生成：网格用缩略图、点开看原图。配置只存你手机，不上传任何人。</div>
+
+  <details class="card" open>
+    <summary>① Cloudinary 配置（首次填，自动存本机）</summary>
+    <label>Cloud Name</label><input id="c_cloud" placeholder="Cloudinary 控制台里的 Cloud Name">
+    <label>Upload Preset（免签名上传预设）</label><input id="c_preset" placeholder="如 mlinkr_unsigned">
+    <label>存放目录 Folder（可选）</label><input id="c_folder" placeholder="如 works ，可留空">
+    <label>缩略图长边(px)</label><input id="c_long" type="number" value="1600" min="200" max="4000">
+    <div class="tip">缩略图由 Cloudinary 实时生成（在 URL 里插入 <code>w_1600,c_limit,q_auto,f_auto</code>），不占额外存储。网格加载缩略图、灯箱看原图。</div>
+  </details>
+
+  <details class="card">
+    <summary>❓ 怎么拿到这些配置（只用手机，不用绑卡）</summary>
+    <div class="tip" style="font-size:12px;line-height:1.7">
+      <p><b>1.</b> 手机浏览器开 <code>cloudinary.com</code> 注册（邮箱即可，<b>无需信用卡</b>），免费额度 25GB 存储+带宽/月。</p>
+      <p><b>2.</b> 进控制台 → <b>Settings → Upload → Upload presets → Add upload preset</b>。</p>
+      <p><b>3.</b> <b>Signing Mode</b> 选 <b>Unsigned（免签名）</b>，命名如 <code>mlinkr_unsigned</code>，保存。这个预设名就是下面的 Upload Preset。</p>
+      <p><b>4.</b> <b>Cloud Name</b>：控制台首页右上角或 Dashboard 里能看到（一串短字母数字）。</p>
+      <p><b>5.</b> 回到本页填好，自动记住，下次免填 → 选图上传即可。</p>
+      <p><b>6.</b> 复制全部外链，去网站后台进专栏点「🌐 粘贴外链图片」粘贴。每行已是 <code>原图 | 标题 | 缩略图</code> 格式。</p>
+    </div>
+  </details>
+
+  <div class="card">
+    <label style="margin-top:0">② 选择图片（可多选）</label>
+    <input id="file" type="file" accept="image/*" multiple>
+    <div class="bar"><i id="bar"></i></div>
+    <button class="primary" id="up">上传并生成外链</button>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="copyAll">复制全部外链</button>
+      <button class="ghost" id="clear">清结果</button>
+    </div>
+  </div>
+
+  <div class="card" id="out"><div class="tip">生成的链接会显示在这里，点右侧按钮复制单条，或一键复制全部。</div></div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg, cls=''){ const t=$('#toast'); t.textContent=msg; t.className='toast show '+cls; setTimeout(()=>t.className='toast', 2600); }
+function escapeHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function copy(t){ navigator.clipboard?.writeText(t).then(()=>toast('已复制','ok'),()=>toast('复制失败','err')); }
+
+/* ---------- 上传到 Cloudinary（浏览器直传，免签名 preset，无需后端/无需 SigV4） ---------- */
+async function uploadOne(file, cfg){
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', cfg.preset);
+  if(cfg.folder) fd.append('folder', cfg.folder);
+  const url = `https://api.cloudinary.com/v1_1/${cfg.cloud}/image/upload`;
+  const res = await fetch(url, { method:'POST', body: fd });
+  if(!res.ok) throw new Error('Cloudinary 返回 '+res.status);
+  const data = await res.json();
+  const orig = data.secure_url;
+  if(!orig) throw new Error('未返回图片地址');
+  // 缩略图：在 /upload/ 后插入变换段，原图同一张实时生成
+  const transform = `w_${cfg.long},c_limit,q_auto,f_auto`;
+  const thumb = orig.replace('/upload/', '/upload/' + transform + '/');
+  const title = file.name.replace(/\s+/g,'_').replace(/\.[^.]+$/, '');
+  return { orig, thumb, title };
+}
+
+/* ---------- UI ---------- */
+const CK = 'cldcfg';
+function loadCfg(){ try{ return JSON.parse(localStorage.getItem(CK)||'{}'); }catch{ return {}; } }
+function saveCfg(c){ localStorage.setItem(CK, JSON.stringify(c)); }
+(function init(){ const c=loadCfg(); ['cloud','preset','folder','long'].forEach(k=>{ if(c[k]!=null) $('#c_'+k).value=c[k]; }); })();
+
+$('#up').onclick = async ()=>{
+  const cfg = { cloud:$('#c_cloud').value.trim(), preset:$('#c_preset').value.trim(),
+                folder:$('#c_folder').value.trim(), long:Math.max(200, Math.min(4000, parseInt($('#c_long').value)||1600)) };
+  if(!cfg.cloud||!cfg.preset){ toast('请先填 Cloud Name 和 Upload Preset','err'); return; }
+  saveCfg(cfg);
+  const files = [...$('#file').files];
+  if(!files.length){ toast('请先选图片','err'); return; }
+  $('#out').innerHTML=''; let done=0;
+  for(const f of files){
+    const item=document.createElement('div'); item.className='url'; item.innerHTML='<span>上传中…</span>'; $('#out').prepend(item);
+    try{
+      const r = await uploadOne(f, cfg);
+      const line = `${r.orig} | ${r.title} | ${r.thumb}`;
+      item.dataset.line = line;
+      item.innerHTML = `<span><b>✓</b> ${escapeHtml(line)}</span>`;
+      const b=document.createElement('button'); b.textContent='复制'; b.onclick=()=>copy(item.dataset.line); item.append(b);
+    }catch(e){ item.innerHTML = `<span class="err">✗ ${f.name}: ${e.message}</span>`; }
+    done++; $('#bar').style.width = (done/files.length*100)+'%';
+  }
+  toast('完成 '+files.length+' 张','ok');
+};
+$('#copyAll').onclick = ()=>{
+  const lines=[...document.querySelectorAll('#out .url')].map(d=>d.dataset.line).filter(Boolean);
+  if(!lines.length){ toast('还没有链接','err'); return; }
+  copy(lines.join('\n'));
+};
+$('#clear').onclick = ()=>{ $('#out').innerHTML='<div class="tip">生成的链接会显示在这里。</div>'; $('#bar').style.width='0'; };
+</script>
+</body>
+</html>
