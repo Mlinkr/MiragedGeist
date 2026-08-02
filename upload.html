@@ -44,6 +44,21 @@
     <div class="tip">公共基址 = 给桶开启「公开访问」后得到的 <code>https://pub-xxxx.r2.dev</code>，或你绑定的自定义域名。对象键会拼在它后面。</div>
   </details>
 
+  <details class="card">
+    <summary>❓ 怎么拿到这些 R2 配置（只用手机，不用电脑）</summary>
+    <div class="tip" style="font-size:12px;line-height:1.7">
+      <p><b>1.</b> 手机浏览器打开 <code>dash.cloudflare.com</code> 登录（无账号先免费注册）。</p>
+      <p><b>2.</b> 左侧菜单选 <b>R2 对象存储</b>（首次按提示免费开通）。</p>
+      <p><b>3.</b> 点 <b>创建存储桶</b>，名字自取（如 <code>mlinkr-photos</code>），地区选 <b>自动</b>。</p>
+      <p><b>4.</b> 进桶后开启 <b>公开访问（Public access）</b>，会得到 <code>https://pub-xxxx.r2.dev</code> —— 这就是「公共访问基址」。<br>进阶：想用自己域名可在桶里绑定自定义域（需域名托管在 Cloudflare），新手先用 .r2.dev 即可。</p>
+      <p><b>5.</b> <b>Account ID</b>：R2 概览页 URL 里 <code>cloudflare.com/</code> 后面那串就是；或在账户主页右侧「API」处复制。</p>
+      <p><b>6.</b> 创建<b>专用令牌</b>：R2 → <b>管理 R2 API 令牌</b> → <b>创建</b>：权限选 <b>对象读写</b>，范围（Scope）勾选 <b>仅本桶</b>（只动这一个桶，手机丢了也不怕），创建后<b>立刻保存 Access Key ID 和 Secret</b>（Secret 只显示一次）。</p>
+      <p><b>7.</b> 回到本页把上面 ① 六项填好（Secret 只存你手机，不上传任何人），填完自动记住，下次免填。</p>
+      <p><b>8.</b> 选图 → <b>上传并生成外链</b> → 复制，再去网站后台「🌐 粘贴外链图片」粘贴即可。</p>
+      <p><b>费用：</b>存储约 $0.015/GB·月，免费额度 10GB + 每月 1000万次读取；<b>出站流量免费</b>（正是选 R2 的原因）。你单图≤30MB、上千张基本在免费额度内。</p>
+    </div>
+  </details>
+
   <div class="card">
     <label style="margin-top:0">② 选择图片（可多选）</label>
     <input id="file" type="file" accept="image/*" multiple>
