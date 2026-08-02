@@ -493,14 +493,6 @@
           "kind": "image",
           "title": "IMG 0850",
           "star": false
-        },
-        {
-          "id": "msb98lwag55q0",
-          "src": "https://res.cloudinary.com/gopfeu83/image/upload/v1785642126/Photos/nj2k8tufmlurwvuas6qy.jpg",
-          "thumb": "https://res.cloudinary.com/gopfeu83/image/upload/w_1600,c_limit,q_auto,f_auto/v1785642126/Photos/nj2k8tufmlurwvuas6qy.jpg",
-          "kind": "image",
-          "title": "IMG_3896",
-          "star": false
         }
       ]
     },
@@ -1298,5 +1290,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-02T03:43:10.007Z"
+  "updatedAt": "2026-08-02T04:12:57.019Z"
 }
