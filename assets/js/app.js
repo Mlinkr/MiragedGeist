@@ -528,6 +528,30 @@ export function openLightbox(items, index) {
   document.body.style.overflow = 'hidden';
   paintLightbox();
 }
+/* 跨域友好的"一键下载"：先 fetch 成 blob 触发下载；跨域未开 CORS 时回退到新标签打开 */
+function downloadName(it, isVideo) {
+  let urlName = '';
+  try { urlName = decodeURIComponent(new URL(it.src, location.href).pathname.split('/').pop() || ''); } catch {}
+  const hasExt = /\.[a-z0-9]{1,5}$/i.test(urlName);
+  const ext = hasExt ? urlName.split('.').pop().toLowerCase() : (isVideo ? 'mp4' : 'jpg');
+  const base = (it.title || urlName.replace(/\.[^.]+$/, '') || (isVideo ? 'video' : 'image'));
+  return base + '.' + ext;
+}
+async function downloadViaBlob(url, filename) {
+  try {
+    const res = await fetch(url, { mode: 'cors', referrerPolicy: 'no-referrer' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+  } catch {
+    window.open(url, '_blank', 'noopener'); // 跨域未开 CORS：回退到新标签，访客可手动长按/右键保存
+  }
+}
+
 function paintLightbox() {
   const it = lbItems[lbIndex];
   if (!it) return;
@@ -540,12 +564,15 @@ function paintLightbox() {
 
   const cap = $('#lbCap');
   cap.innerHTML = '';
-  cap.append(el('a', {
+  const dlBtn = el('a', {
     class: 'lb-download',
     href: it.src,
     download: it.title || (isVideo ? 'video' : 'image'),
     target: '_blank',
-  }, isVideo ? '下载原视频' : '下载原图'));
+    rel: 'noopener',
+  }, isVideo ? '下载原视频' : '下载原图');
+  dlBtn.onclick = (e) => { e.preventDefault(); downloadViaBlob(it.src, downloadName(it, isVideo)); };
+  cap.append(dlBtn);
   const multi = lbItems.length > 1;
   $('#lbPrev').hidden = !multi; $('#lbNext').hidden = !multi;
 }
