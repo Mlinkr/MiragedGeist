@@ -418,11 +418,18 @@ function renderPager(pager, totalPages, current, onSelect) {
   pager.innerHTML = '';
   if (totalPages <= 1) return;
 
+  // 翻页保持当前滚动位置：记录 y，重渲染后原样恢复（防止浏览器滚动锚定跳移）
+  const go = (p) => {
+    const y = window.scrollY;
+    onSelect(p);
+    window.scrollTo({ top: y, behavior: 'instant' });
+  };
+
   pager.append(el('button', {
     class: 'pg-btn' + (current === 0 ? ' disabled' : ''),
     disabled: current === 0 ? 'disabled' : null,
     'aria-label': '上一页',
-    onclick: () => { if (current > 0) onSelect(current - 1); },
+    onclick: () => { if (current > 0) go(current - 1); },
   }, '‹'));
 
   pageNumbers(current, totalPages).forEach(n => {
@@ -433,7 +440,7 @@ function renderPager(pager, totalPages, current, onSelect) {
       pager.append(el('button', {
         class: 'pg-btn' + (on ? ' on' : ''),
         'aria-label': `第 ${n} 页`,
-        onclick: () => onSelect(n - 1),
+        onclick: () => go(n - 1),
       }, String(n)));
     }
   });
@@ -442,7 +449,7 @@ function renderPager(pager, totalPages, current, onSelect) {
     class: 'pg-btn' + (current === totalPages - 1 ? ' disabled' : ''),
     disabled: current === totalPages - 1 ? 'disabled' : null,
     'aria-label': '下一页',
-    onclick: () => { if (current < totalPages - 1) onSelect(current + 1); },
+    onclick: () => { if (current < totalPages - 1) go(current + 1); },
   }, '›'));
 }
 
