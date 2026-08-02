@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手机直传 R2 · 生成图片外链</title>
+<style>
+  :root{ --bg:#16121f; --card:#221a30; --fg:#ece8f5; --mut:#a99fc0; --acc:#8b6cf0; --ok:#39d98a; --err:#ff6b81; --bd:#352a4a; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; padding:14px; }
+  h1{ font-size:18px; margin:4px 0 2px; } .sub{ color:var(--mut); font-size:12px; margin-bottom:12px; line-height:1.5; }
+  .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; margin-bottom:12px; }
+  label{ display:block; font-size:12px; color:var(--mut); margin:10px 0 4px; }
+  input{ width:100%; padding:11px; border-radius:10px; border:1px solid var(--bd); background:#1a1426; color:var(--fg); font-size:14px; }
+  input:focus{ outline:none; border-color:var(--acc); }
+  button{ width:100%; padding:13px; border:0; border-radius:11px; font-size:15px; font-weight:600; margin-top:10px; cursor:pointer; }
+  .primary{ background:var(--acc); color:#fff; } .ghost{ background:#2c2240; color:var(--fg); }
+  .row{ display:flex; gap:8px; } .row button{ margin-top:0; }
+  .tip{ font-size:11px; color:var(--mut); line-height:1.5; margin-top:6px; }
+  .bar{ height:6px; background:#1a1426; border-radius:4px; overflow:hidden; margin-top:6px; }
+  .bar > i{ display:block; height:100%; width:0; background:var(--ok); transition:width .2s; }
+  .url{ display:flex; gap:8px; align-items:center; background:#1a1426; border:1px solid var(--bd); border-radius:9px; padding:8px 10px; margin-top:8px; font-size:12px; word-break:break-all; }
+  .url b{ color:var(--ok); }
+  .url button{ width:auto; margin:0; padding:6px 10px; font-size:12px; background:var(--acc); color:#fff; border-radius:8px; flex:none; }
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000a; padding:10px 16px; border-radius:10px; font-size:13px; opacity:0; transition:.3s; max-width:90%; }
+  .toast.show{ opacity:1; } .err{ color:var(--err); } .ok{ color:var(--ok); }
+  details summary{ cursor:pointer; color:var(--mut); font-size:13px; }
+  code{ background:#1a1426; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>📤 手机直传 R2 图床</h1>
+  <div class="sub">选图 → 直传 Cloudflare R2 → 生成外链，粘到网站后台的「🌐 粘贴外链图片」。
+  密钥只存在本机，不上传任何人。建议用一个<strong>仅限本桶读写</strong>的专用令牌。</div>
+
+  <details class="card" open>
+    <summary>① R2 配置（首次填，自动存本机）</summary>
+    <label>Account ID</label><input id="c_account" placeholder="Cloudflare 账号的 Account ID">
+    <label>Access Key ID</label><input id="c_key" placeholder="R2 API 令牌的 Access Key ID">
+    <label>Secret Access Key</label><input id="c_secret" type="password" placeholder="R2 API 令牌的 Secret">
+    <label>Bucket 名称</label><input id="c_bucket" placeholder="例如 my-photos">
+    <label>公共访问基址（Public URL 前缀）</label><input id="c_base" placeholder="https://pub-xxxx.r2.dev 或 https://img.你的域名">
+    <label>上传目录前缀（可选）</label><input id="c_prefix" placeholder="例如 works/ ，可留空">
+    <div class="tip">公共基址 = 给桶开启「公开访问」后得到的 <code>https://pub-xxxx.r2.dev</code>，或你绑定的自定义域名。对象键会拼在它后面。</div>
+  </details>
+
+  <div class="card">
+    <label style="margin-top:0">② 选择图片（可多选）</label>
+    <input id="file" type="file" accept="image/*" multiple>
+    <div class="bar"><i id="bar"></i></div>
+    <button class="primary" id="up">上传并生成外链</button>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="copyAll">复制全部外链</button>
+      <button class="ghost" id="clear">清结果</button>
+    </div>
+  </div>
+
+  <div class="card" id="out"><div class="tip">生成的链接会显示在这里，点右侧按钮复制单条，或一键复制全部。</div></div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder();
+const bufHex = b => Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+const sha256 = async d => bufHex(await crypto.subtle.digest('SHA-256', typeof d==='string'?enc.encode(d):d));
+async function hmac(key, data){
+  const k = await crypto.subtle.importKey('raw', typeof key==='string'?enc.encode(key):key, {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+  return crypto.subtle.sign('HMAC', k, typeof data==='string'?enc.encode(data):data);
+}
+function amzDate(d){ return d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z'); }
+
+/* AWS SigV4（region=auto, service=s3）—— 纯浏览器实现，无后端 */
+async function signV4({secret, accessKey, region, service, method, uri, headers, payload}){
+  const amz = headers['x-amz-date'];
+  const date = amz.slice(0,8);
+  const payloadHash = await sha256(payload);
+  const keys = Object.keys(headers).map(k=>k.toLowerCase()).sort();
+  const canonicalHeaders = keys.map(k=>`${k}:${String(headers[k]).trim()}\n`).join('');
+  const signedHeaders = keys.join(';');
+  const canonicalRequest = [method, uri, '', canonicalHeaders, signedHeaders, payloadHash].join('\n');
+  const scope = `${date}/${region}/${service}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amz, scope, await sha256(canonicalRequest)].join('\n');
+  let kDate = await hmac('AWS4'+secret, date);
+  let kRegion = await hmac(kDate, region);
+  let kService = await hmac(kRegion, service);
+  let kSign = await hmac(kService, 'aws4_request');
+  const sig = bufHex(await hmac(kSign, stringToSign));
+  return `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${sig}`;
+}
+
+async function uploadOne(file, cfg){
+  const cleanPrefix = cfg.prefix ? cfg.prefix.replace(/\/+$/,'') + '/' : '';
+  const rawName = file.name.replace(/\s+/g,'_');
+  const key = cleanPrefix + Date.now() + '_' + rawName;
+  // 逐段 URI 编码路径，兼容中文/特殊字符文件名（S3/R2 规范）
+  const encKey = key.split('/').map(encodeURIComponent).join('/');
+  const host = `${cfg.account}.r2.cloudflarestorage.com`;
+  const uri = `/${cfg.bucket}/${encKey}`;
+  const body = new Uint8Array(await file.arrayBuffer());
+  const payloadHash = await sha256(body);
+  const amz = amzDate(new Date());
+  const headers = {
+    'host': host,
+    'x-amz-date': amz,
+    'x-amz-content-sha256': payloadHash,
+    'content-type': file.type || 'application/octet-stream',
+  };
+  const auth = await signV4({ secret:cfg.secret, accessKey:cfg.key, region:'auto', service:'s3', method:'PUT', uri, headers, payload:body });
+  const res = await fetch(`https://${host}${uri}`, { method:'PUT', headers:{ ...headers, 'Authorization':auth }, body });
+  if(!res.ok) throw new Error('R2 返回 '+res.status);
+  return cfg.base.replace(/\/+$/,'') + '/' + encKey;
+}
+
+/* ---------- UI ---------- */
+function toast(msg, cls=''){ const t=$('#toast'); t.textContent=msg; t.className='toast show '+cls; setTimeout(()=>t.className='toast', 2600); }
+function loadCfg(){ try{ return JSON.parse(localStorage.getItem('r2cfg')||'{}'); }catch{ return {}; } }
+function saveCfg(c){ localStorage.setItem('r2cfg', JSON.stringify(c)); }
+(function init(){ const c=loadCfg(); ['account','key','secret','bucket','base','prefix'].forEach(k=>{ if(c[k]) $('#c_'+k).value=c[k]; }); })();
+
+$('#up').onclick = async ()=>{
+  const cfg = { account:$('#c_account').value.trim(), key:$('#c_key').value.trim(), secret:$('#c_secret').value.trim(),
+                bucket:$('#c_bucket').value.trim(), base:$('#c_base').value.trim(), prefix:$('#c_prefix').value.trim() };
+  if(!cfg.account||!cfg.key||!cfg.secret||!cfg.bucket||!cfg.base){ toast('请先填完 R2 配置','err'); return; }
+  saveCfg(cfg);
+  const files = [...$('#file').files];
+  if(!files.length){ toast('请先选图片','err'); return; }
+  $('#out').innerHTML=''; let done=0;
+  for(const f of files){
+    const item=document.createElement('div'); item.className='url'; item.innerHTML='<span>上传中…</span>'; $('#out').prepend(item);
+    try{
+      const url = await uploadOne(f, cfg);
+      item.innerHTML = `<span><b>✓</b> ${url}</span>`;
+      const b=document.createElement('button'); b.textContent='复制'; b.onclick=()=>copy(url); item.append(b);
+    }catch(e){ item.innerHTML = `<span class="err">✗ ${f.name}: ${e.message}</span>`; }
+    done++; $('#bar').style.width = (done/files.length*100)+'%';
+  }
+  toast('完成 '+done+' 张','ok');
+};
+function copy(t){ navigator.clipboard?.writeText(t).then(()=>toast('已复制','ok'),()=>toast('复制失败','err')); }
+$('#copyAll').onclick = ()=>{
+  const urls=[...document.querySelectorAll('#out .url span')].map(s=>s.textContent.replace(/^[✓✗]\s*/,'')).filter(Boolean);
+  if(!urls.length){ toast('还没有链接','err'); return; }
+  copy(urls.join('\n'));
+};
+$('#clear').onclick = ()=>{ $('#out').innerHTML='<div class="tip">生成的链接会显示在这里。</div>'; $('#bar').style.width='0'; };
+</script>
+</body>
+</html>
