@@ -1,0 +1,26 @@
+name: Sync to Gitee
+
+# 推送到 GitHub 后，自动把 main 分支镜像到 Gitee，保持 Gitee Pages 源始终最新。
+# 需在 GitHub 仓库 Settings → Secrets → Actions 中添加名为 GITEE_TOKEN 的私人令牌
+# （在 gitee.com 个人设置 → 私人令牌 生成，勾选 projects/repo 权限）。
+# 若未配置该密钥，本任务自动跳过（不会报错、不会打扰）。
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    if: ${{ secrets.GITEE_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          git remote add gitee https://oauth2:${GITEE_TOKEN}@gitee.com/mlinkr/MiragedGeist.git
+          git push gitee HEAD:main --force
