@@ -15,7 +15,30 @@ export function renderAll() {
   $('#year').textContent = new Date().getFullYear();
   $('#footMark').textContent = store.data.profile.name || 'MiragedGeist';
   document.title = store.data.profile.name || 'MiragedGeist';
+  renderUpdated();
 }
+
+/* 页脚“更新于 X 前”：从 data.site.json 的 updatedAt 计算，并定时刷新 */
+function fmtAgo(iso) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  if (s < 604800) return Math.floor(s / 86400) + ' 天前';
+  if (s < 2592000) return Math.floor(s / 604800) + ' 周前';
+  if (s < 31536000) return Math.floor(s / 2592000) + ' 个月前';
+  return Math.floor(s / 31536000) + ' 年前';
+}
+function renderUpdated() {
+  const node = document.getElementById('updatedAt');
+  if (!node) return;
+  const ago = fmtAgo(store.data && store.data.updatedAt);
+  node.textContent = ago ? '更新于 ' + ago : '';
+}
+setInterval(renderUpdated, 60000);
 
 function renderHero() {
   const p = store.data.profile;
