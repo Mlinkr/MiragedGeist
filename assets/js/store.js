@@ -15,6 +15,9 @@ export function placeholder(text = 'MiragedGeist', w = 800, h = 1000, c1 = '#1b1
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+/* 本机草稿键（与 admin.js 的 LS_LOCAL 保持一致） */
+const LS_LOCAL = 'mg_local_data';
+
 export const DEFAULT_DATA = {
   version: 2,
   profile: {
@@ -49,16 +52,28 @@ export const store = {
   editing: false,
 
   async load() {
+    let data = null;
     try {
       const res = await fetch(`${DATA_PATH}?t=${Date.now()}`, { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        this.data = migrate(json);
-        return true;
+      if (res.ok) data = migrate(await res.json());
+    } catch { /* 网络/部署异常，退而用本地草稿或默认值 */ }
+    if (!data) data = structuredClone(DEFAULT_DATA);
+
+    // 自动恢复本机未发布的草稿：只要本机草稿比线上版本新，就合并进来，
+    // 避免「粘贴了链接 → 刷新页面 → 内存草稿清空 → 以为没保存」的误会。
+    try {
+      const raw = localStorage.getItem(LS_LOCAL);
+      if (raw) {
+        const draft = migrate(JSON.parse(raw));
+        const dT = new Date(draft.updatedAt || 0).getTime();
+        const oT = new Date(data.updatedAt || 0).getTime();
+        if (dT > oT) { data = draft; this.dirty = true; }
       }
-    } catch { /* 首次部署还没有 site.json，用默认值 */ }
-    this.data = structuredClone(DEFAULT_DATA);
-    return false;
+    } catch { /* 草稿损坏则忽略 */ }
+
+    this.data = data;
+    if (this.dirty) window.dispatchEvent(new CustomEvent('mg:dirty'));
+    return data !== DEFAULT_DATA;
   },
 
   mark() { this.dirty = true; window.dispatchEvent(new CustomEvent('mg:dirty')); },

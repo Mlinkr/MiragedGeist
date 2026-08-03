@@ -390,6 +390,16 @@ select option{background:#f7f4f0}
 .edit-bar button{padding:5px 13px;border-radius:8px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;font-weight:550}
 .edit-bar button:hover{background:#000}
 body.editing{padding-top:40px}
+
+/* 常驻「一键发布」气泡：有未发布修改时浮在右下角，避免忘记点发布 */
+.publish-fab{position:fixed;right:14px;bottom:62px;z-index:160;max-width:80vw;
+  padding:11px 15px;border:0;border-radius:999px;
+  background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;
+  font-size:13px;font-weight:650;white-space:nowrap;cursor:pointer;
+  box-shadow:0 8px 24px -6px rgba(120,80,200,.55);animation:pf-in .25s ease}
+.publish-fab.warn{background:linear-gradient(120deg,#e0894b,#e0b04b);box-shadow:0 8px 24px -6px rgba(200,140,60,.5)}
+.publish-fab:active{transform:scale(.97)}
+@keyframes pf-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 body.editing .cover-edit{top:56px}
 
 /* ---------- 搜索条 ---------- */

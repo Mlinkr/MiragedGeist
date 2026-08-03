@@ -50,12 +50,13 @@ export function setEditing(on, silent) {
 
 function paintBar() {
   let bar = $('.edit-bar');
-  if (!store.editing) { bar?.remove(); return; }
+  if (!store.editing) { bar?.remove(); paintFab(); return; }
   if (!bar) {
     bar = el('div', { class: 'edit-bar' });
     document.body.prepend(bar);
   }
   bar.innerHTML = '';
+  paintFab();
   const mode = gh.ready ? `${gh.cfg.owner}/${gh.cfg.repo}` : '本地体验模式（不会保存到线上）';
   bar.append(
     el('span', {}, `编辑模式 · ${mode}${store.dirty ? ' · 有未发布修改' : ''}`),
@@ -63,6 +64,25 @@ function paintBar() {
     el('button', { onclick: () => openConsole() }, '面板'),
     el('button', { onclick: () => setEditing(false) }, '退出')
   );
+}
+
+/* 常驻「一键发布」气泡：有未发布修改时，无论是否进入编辑模式都能直接发布 */
+function paintFab() {
+  let fab = $('.publish-fab');
+  if (store.dirty) {
+    if (!fab) { fab = el('button', { class: 'publish-fab' }); document.body.append(fab); }
+    if (gh.ready) {
+      fab.className = 'publish-fab';
+      fab.textContent = '↑ 有未发布修改 · 点此发布';
+      fab.onclick = () => publish();
+    } else {
+      fab.className = 'publish-fab warn';
+      fab.textContent = '⚠ 未连接仓库 · 点此连接';
+      fab.onclick = () => openConsole();
+    }
+  } else {
+    fab?.remove();
+  }
 }
 
 async function publish() {
