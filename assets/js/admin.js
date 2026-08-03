@@ -35,6 +35,7 @@ function loadLocal() {
 export function init() {
   if (localStorage.getItem(LS_EDIT) === '1') setEditing(true, true);
   window.addEventListener('mg:dirty', paintBar);
+  if (store.dirty) paintBar(); // 刷新后自动恢复了本机草稿，立即提示发布
 }
 
 /* ================= 编辑模式开关 ================= */
