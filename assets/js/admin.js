@@ -432,14 +432,15 @@ export async function renameCollection(kind, id) {
   const v = window.prompt('专栏名称', col.title || '');
   if (v === null) return;
   const newName = v.trim() || '未命名专栏';
-  if (newName === col.id) { col.title = newName; changed(); return; }
-  const oldId = col.id;          // id 即 COS 文件夹名，随之更新
-  col.id = newName;
+  // 用真实 COS 文件夹名（从 URL 解析），不要用 col.id（slug）当文件夹
+  const oldFolder = col.folder || folderOf(col) || col.id;
+  if (newName === oldFolder) { col.title = newName; changed(); return; }
   col.title = newName;
-  colCosUrls(col, oldId, newName);  // 改写本专栏所有图片 URL 的文件夹
+  col.folder = newName;          // 记录真实文件夹名，后续改名/移动都用它
+  colCosUrls(col, oldFolder, newName);  // 改写本专栏所有图片 URL 的文件夹
   changed();
   toast('已改名，记得发布', 'ok');
-  cosSync({ action: 'rename_folder', old: oldId, new: newName },
+  cosSync({ action: 'rename_folder', old: oldFolder, new: newName },
           '桶内文件夹已同步重命名', '桶文件夹同步失败');
 }
 
@@ -672,6 +673,17 @@ function cosBaseOf(u) {
   const m = /^https:\/\/[^/]+\.myqcloud\.com\//.exec(u || '');
   return m ? m[0] : '';
 }
+/* 从专栏首个图片 URL 解析出真实 COS 文件夹名（如 Photos/Kpop/ -> 'Kpop'）。
+   注意：col.id 只是前端 slug（如 ms92t7bf36gbo），真正的桶文件夹是显示名派生出来的，
+   改名/移动必须以真实文件夹名为准，否则会改错/改不到桶。 */
+function folderOf(col) {
+  for (const it of col.items || []) {
+    const u = it.src || it.thumb || '';
+    const m = /\/Photos\/([^/]+)\//.exec(u);
+    if (m) return m[1];
+  }
+  return '';
+}
 /* 把 URL 里的 Photos/<oldId>/ 改写为 Photos/<newId>/ */
 function rewriteCosFolder(u, oldId, newId) {
   const base = cosBaseOf(u);
@@ -777,13 +789,15 @@ export async function moveItem(kind, fromColId, itemId, toColId) {
   if (!from || !to) return;
   const it = from.items.find(i => i.id === itemId);
   if (!it) return;
-  itemCosUrl(it, fromColId, toColId);   // 改写该图片 URL 的文件夹
+  const fromFolder = from.folder || folderOf(from) || fromColId;
+  const toFolder = to.folder || folderOf(to) || toColId;
+  itemCosUrl(it, fromFolder, toFolder);   // 改写该图片 URL 的文件夹
   from.items = from.items.filter(i => i.id !== itemId);
   to.items.push(it);
   changed();
   toast(`已移动到「${to.title || '未命名专栏'}」`, 'ok');
   const file = (it.src.split('?')[0].split('/').pop() || '');
-  cosSync({ action: 'move_object', from: fromColId, to: toColId, file },
+  cosSync({ action: 'move_object', from: fromFolder, to: toFolder, file },
           '桶内图片已同步移动', '桶图片同步失败');
 }
 

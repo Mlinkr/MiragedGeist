@@ -609,9 +609,18 @@ function paintLightbox() {
   const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
   /* 图片：COS 用数据万象缩略版查看(快)，非 COS 用原图 */
   const viewSrc = isVideo ? it.src : (isCosUrl(it.src) ? cosViewUrl(it.src) : it.src);
-  stage.append(isVideo
-    ? el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' })
-    : el('img', { src: viewSrc, referrerpolicy: 'no-referrer', alt: '' }));
+  if (isVideo) {
+    stage.append(el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' }));
+  } else {
+    const img = el('img', { src: viewSrc, referrerpolicy: 'no-referrer', alt: it.title || '图片' });
+    let fellBack = false;
+    img.onerror = () => {
+      // 数据万象缩略失败 -> 退回原图（不含 CI 参数）；都失败则给出提示
+      if (!fellBack && it.src && it.src !== viewSrc) { fellBack = true; img.src = it.src; }
+      else { img.alt = '图片加载失败，请检查网络或原图链接'; }
+    };
+    stage.append(img);
+  }
 
   const cap = $('#lbCap');
   cap.innerHTML = '';

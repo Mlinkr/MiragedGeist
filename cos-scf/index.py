@@ -6,6 +6,7 @@
 部署方式：事件函数 + 函数URL(公网)。详见 README.md
 """
 import os, json, time, hmac, hashlib, base64, urllib.request, urllib.error, urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 
 SID = os.environ.get('COS_SECRET_ID', '')
@@ -125,13 +126,38 @@ def main_handler(event, context):
         a = b.get('action')
         if a == 'rename_folder':
             o, n = 'Photos/%s/' % b['old'], 'Photos/%s/' % b['new']
-            # 先复制，再删除旧文件（COS 无 rename，靠 copy+delete 实现）
-            for k in _ls(o):
+            ks = _ls(o)
+            if not ks:
+                # 旧文件夹不存在：无需复制（也避免误删）。返回成功，交由前端处理。
+                return {'statusCode': 200, 'headers': H,
+                        'body': json.dumps({'ok': True, 'copied': 0, 'note': 'old folder empty/not found'}, ensure_ascii=False),
+                        'isBase64Encoded': False}
+            copied, failed = [], []
+            def _cp(k):
                 nk = n + k.split('/')[-1]
-                _api('PUT', '/' + nk, headers={'x-cos-copy-source': f'/{BUCKET}/{urllib.parse.quote(k, safe="/")}'})
-            for k in _ls(o):
-                _api('DELETE', '/' + k)
-            return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True}, ensure_ascii=False), 'isBase64Encoded': False}
+                try:
+                    _api('PUT', '/' + nk, headers={'x-cos-copy-source': f'/{BUCKET}/{urllib.parse.quote(k, safe="/")}'})
+                    return k, True
+                except Exception:
+                    return k, False
+            # 并发复制，记录成功项
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                for k, ok in ex.map(_cp, ks):
+                    (copied if ok else failed).append(k)
+            # 关键：只删除“已确认复制成功”的旧文件，超时/部分失败也不会丢数据
+            def _rm(k):
+                try:
+                    _api('DELETE', '/' + k)
+                    return True
+                except Exception:
+                    return False
+            deleted = 0
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                for ok in ex.map(_rm, copied):
+                    deleted += 1 if ok else 0
+            return {'statusCode': 200, 'headers': H, 'isBase64Encoded': False,
+                    'body': json.dumps({'ok': True, 'total': len(ks), 'copied': len(copied),
+                                        'deleted': deleted, 'failed': len(failed)}, ensure_ascii=False)}
         if a == 'move_object':
             s, d = 'Photos/%s/%s' % (b['from'], b['file']), 'Photos/%s/%s' % (b['to'], b['file'])
             _api('PUT', '/' + d, headers={'x-cos-copy-source': f'/{BUCKET}/{urllib.parse.quote(s, safe="/")}'})
