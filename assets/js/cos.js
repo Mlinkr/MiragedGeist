@@ -36,15 +36,16 @@ export function cosReady() {
 export function cosRelay(key, blob, contentType, onProgress) {
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) throw new Error('COS 中转地址未配置');
-  // 调试：打印实际请求 URL 和 base 长度（用于排查不可见字符/地址错误）
+  // 真实 MIME 通过 query 参数 ct 传给云函数；XHR 头固定用 text/plain
+  // （「简单请求」Content-Type，避免触发 CORS 预检 OPTIONS。
+  //   部分手机浏览器/WebView 对非标准域名的预检会静默失败导致 onerror）
   const sep = base.includes('?') ? '&' : '?';
   const u = `${base}${sep}action=upload&key=${encodeURIComponent(key)}`
           + `&ct=${encodeURIComponent(contentType || 'application/octet-stream')}`;
-  console.log('[cosRelay] base=', JSON.stringify(base), 'len=' + base.length, 'url=', u);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', u);
-    xhr.setRequestHeader('Content-Type', contentType || 'application/octet-stream');
+    xhr.setRequestHeader('Content-Type', 'text/plain');
     if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -61,7 +62,7 @@ export function cosRelay(key, blob, contentType, onProgress) {
       } catch { /* ignore */ }
       reject(new Error(msg));
     };
-    xhr.onerror = () => reject(new Error('网络错误：无法连接云函数中转地址（base len=' + base.length + ', url=' + u.slice(0, 120) + '）'));
+    xhr.onerror = () => reject(new Error('网络错误：无法连接云函数中转地址'));
     xhr.send(blob);
   });
 }
