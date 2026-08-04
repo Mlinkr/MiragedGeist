@@ -35,10 +35,10 @@
 
   <details class="card" open>
     <summary>① COS 上传配置（首次填，自动存本机）</summary>
-    <label>签名 Worker 地址（必填）</label><input id="c_worker" placeholder="如 https://cos-signer.xxx.workers.dev">
+    <label>签名服务地址（必填）</label><input id="c_worker" placeholder="如 云函数/Worker 公网地址 https://xxxx.tencentcs.com/... 或 https://cos-signer.xxx.workers.dev">
     <label>存放目录 Folder</label><input id="c_folder" placeholder="如 Photos（修图）或 Cut（影视），默认 Photos">
     <label>缩略图长边(px)</label><input id="c_long" type="number" value="1600" min="200" max="4000">
-    <div class="tip">缩略图由腾讯云<strong>数据万象</strong>实时生成（URL 里加 <code>?imageMogr2/thumbnail/1600x</code>），不占额外存储。Worker 部署与桶 CORS 配置见 <code>cloudflare-worker/README.md</code>。</div>
+    <div class="tip">缩略图由腾讯云<strong>数据万象</strong>实时生成（URL 里加 <code>?imageMogr2/thumbnail/1600x</code>），不占额外存储。<b>不用 Cloudflare 也能用</b>：把签名服务部署成腾讯云函数 SCF 即可（见 <code>cos-scf/README.md</code>），或 Cloudflare Worker（见 <code>cloudflare-worker/README.md</code>）。</div>
   </details>
 
   <details class="card">
@@ -48,8 +48,10 @@
       <p><b>2. CORS</b>：存储桶 → <b>安全管理 → 跨域访问 CORS</b> → 新增规则：<br>
          来源 Origin 填 <code>*</code>（或你的站点域名）；Method 勾 <code>PUT,POST,GET,HEAD,OPTIONS</code>；
          Allow-Header 填 <code>*</code>；暴露头部按需。保存。</p>
-      <p><b>3. Worker</b>：把 <code>cloudflare-worker/worker.js</code> 部署到 Cloudflare，环境变量填
-         <code>COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION</code>（SecretKey 只在 Worker，不下发手机）。</p>
+      <p><b>3. 签名服务（二选一，都不用懂代码）</b>：<br>
+         • <b>腾讯云函数 SCF</b>（推荐，和 COS 同账号）：把 <code>cos-scf/index.py</code> 部署成事件函数+HTTP 触发，详见 <code>cos-scf/README.md</code>。<br>
+         • <b>Cloudflare Worker</b>：把 <code>cloudflare-worker/worker.js</code> 部署到 Cloudflare，详见 <code>cloudflare-worker/README.md</code>。<br>
+         两者都只需填环境变量 <code>COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION</code>（SecretKey 只在服务端，不下发手机）。</p>
     </div>
   </details>
 
