@@ -3,6 +3,7 @@ import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast,
 import { gh } from './github.js';
 import { store, DEFAULT_DATA } from './store.js';
 import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js';
+import { cosCfg, cosReady, saveCosCfg, cosPut } from './cos.js';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -159,10 +160,10 @@ export function openConsole() {
         field('COS 同步服务地址（SCF）',
           input({ id: 'f_cos_sync', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/release/...' }),
           '部署 cos-scf 云函数后填这里。改名专栏 / 移动图片时，桶里的文件夹和图片会自动跟着变。不填则只改网页、不同步桶。'),
-        el('button', {
-          class: 'btn-ghost', style: 'width:100%;padding:10px;margin-bottom:11px',
-          onclick: () => { setCosSyncUrl($('#f_cos_sync').value); toast('已保存 COS 同步地址', 'ok'); },
-        }, '保存 COS 同步地址')
+      el('button', {
+        class: 'btn-ghost', style: 'width:100%;padding:10px;margin-bottom:11px',
+        onclick: () => { setCosSyncUrl($('#f_cos_sync').value); toast('已保存 COS 同步地址', 'ok'); },
+      }, '保存 COS 同步地址')
       ),
       el('button', {
         class: 'btn-ghost danger', style: 'width:100%;padding:11px',
@@ -170,6 +171,8 @@ export function openConsole() {
       }, '断开连接（清除 Token）')
     );
   }
+  // COS 直传配置：与 GitHub 连接与否无关，始终可配（配好即直传 COS，无需云函数）
+  box.append(cosConfigBox());
   openDrawer('管理面板', box);
 }
 
@@ -568,67 +571,234 @@ export async function removeFilm(id) {
 
 /* ================= 媒体上传 ================= */
 
+/* ================= 批量上传（浏览器直传 COS / GitHub / 本地） ================= */
+
+/** 入口（兼容旧调用 uploadTo(kind, colId)）：打开批量上传抽屉 */
 export async function uploadTo(kind, colId) {
   const col = store.findCollection('works', colId);
   if (!col) return;
-  let files = await pickFiles({ accept: 'image/*,video/*', multiple: true });
-  if (!files.length) return;
+  openUploader(col);
+}
 
-  // 限制单次最多 9 个文件
-  if (files.length > 9) {
-    toast(`一次最多上传 9 个文件，已自动选取前 9 个`, '');
-    files = files.slice(0, 9);
+function openUploader(col) {
+  const folder = col.folder || folderOf(col) || col.title || col.id;
+  const target = cosReady() ? 'cos' : (gh.ready ? 'github' : 'local');
+  const targetText = target === 'cos'
+    ? `腾讯云 COS → Photos/${folder}/ ✅`
+    : target === 'github'
+      ? `GitHub 仓库 media/works/${col.id}/`
+      : `本机预览（未连接任何存储，不会保存）⚠`;
+
+  const items = [];               // {id, file, kind, status, progress, err, result, _node, _status, _bar, _retry}
+  let quality = getQuality();
+  let running = false;
+
+  // 画质选择
+  const qSeg = el('div', { class: 'seg' });
+  Object.entries(QUALITY).forEach(([k, v]) => {
+    qSeg.append(el('button', {
+      class: k === quality ? 'on' : '',
+      onclick: e => { quality = k; [...qSeg.children].forEach(c => c.classList.remove('on')); e.target.classList.add('on'); },
+    }, v.label));
+  });
+
+  // 选择 / 拖拽区
+  const fileInput = el('input', { type: 'file', accept: 'image/*,video/*', multiple: 'multiple', style: 'display:none' });
+  document.body.append(fileInput);
+  const pick = () => fileInput.click();
+  const drop = el('div', { class: 'up-zone', tabindex: '0' },
+    el('div', { style: 'font-size:15px;margin-bottom:6px' }, '把图片 / 视频拖到这里'),
+    el('div', { class: 'hint', style: 'margin-top:6px' }, '或点击选择（可一次选多张）· 支持图片与原画质视频')
+  );
+  const stop = e => { e.preventDefault(); e.stopPropagation(); };
+  drop.onclick = pick;
+  drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+  drop.ondragover = e => { stop(e); drop.classList.add('drag'); };
+  drop.ondragleave = e => { stop(e); drop.classList.remove('drag'); };
+  drop.ondrop = e => { stop(e); drop.classList.remove('drag'); addFiles([...(e.dataTransfer?.files || [])]); };
+  fileInput.onchange = () => { if (fileInput.files.length) addFiles([...fileInput.files]); fileInput.value = ''; };
+
+  const list = el('div', { class: 'up-list' });
+  const emptyHint = el('div', { class: 'up-empty' }, '还没有选择文件');
+  list.append(emptyHint);
+  const summary = el('div', { class: 'up-summary' });
+
+  const startBtn = el('button', { class: 'btn-solid', onclick: runUpload }, '开始上传');
+  const clearBtn = el('button', { class: 'btn-ghost', onclick: clearAll }, '清空列表');
+  const addBtn = el('button', { class: 'btn-ghost', onclick: pick }, '继续添加');
+
+  function fmtSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+  function refreshSummary() {
+    const total = items.length;
+    const done = items.filter(i => i.status === 'done').length;
+    const err = items.filter(i => i.status === 'error').length;
+    summary.textContent = total ? `共 ${total} 个 · 已完成 ${done}${err ? ` · 失败 ${err}` : ''}` : '';
+  }
+  function addFiles(files) {
+    for (const f of files) {
+      const kind = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'other';
+      if (kind === 'other') { toast(`${f.name} 不是图片或视频，已跳过`, 'err'); continue; }
+      const it = { id: uid(), file: f, kind, status: 'pending', progress: 0, err: '' };
+      items.push(it);
+      renderItem(it);
+    }
+    if (files.length) emptyHint.hidden = true;
+    refreshSummary();
+  }
+  function renderItem(it) {
+    const prev = el('div', { class: 'up-thumb' });
+    if (it.kind === 'image') prev.append(el('img', { src: URL.createObjectURL(it.file), alt: '' }));
+    else prev.append(el('video', { src: URL.createObjectURL(it.file), muted: '', preload: 'metadata' }));
+    const status = el('div', { class: 'up-item-status' }, '待上传');
+    const barFill = el('i', {});
+    const retry = el('button', { class: 'mini-btn', title: '重试', style: 'display:none', onclick: () => uploadOne(it) }, '↻');
+    const remove = el('button', { class: 'mini-btn danger', title: '移除', onclick: () => removeItem(it) }, '✕');
+    const node = el('div', { class: 'up-item' }, prev,
+      el('div', { class: 'up-item-main' },
+        el('b', {}, it.file.name),
+        el('span', {}, fmtSize(it.file.size) + ' · ' + (it.kind === 'image' ? '图片' : '视频')),
+        status,
+        el('div', { class: 'up-bar' }, barFill)
+      ),
+      remove, retry);
+    it._node = node; it._status = status; it._bar = barFill; it._retry = retry;
+    list.append(node);
+  }
+  function removeItem(it) {
+    const i = items.indexOf(it);
+    if (i >= 0) items.splice(i, 1);
+    it._node?.remove();
+    if (!items.length) emptyHint.hidden = false;
+    refreshSummary();
+  }
+  function setProgress(it, p) { it.progress = p; if (it._bar) it._bar.style.width = Math.round(p * 100) + '%'; }
+  function setStatus(it, s, text) {
+    it.status = s;
+    if (it._status) it._status.textContent = text;
+    if (it._node) { it._node.classList.toggle('done', s === 'done'); it._node.classList.toggle('error', s === 'error'); }
+    if (it._retry) it._retry.style.display = s === 'error' ? '' : 'none';
+  }
+  function clearAll() {
+    if (running) return toast('上传中，无法清空', 'err');
+    items.forEach(it => it._node?.remove());
+    items.length = 0; emptyHint.hidden = false; refreshSummary();
   }
 
-  const mode = QUALITY[getQuality()] || QUALITY.high;
-  let done = 0;
-  for (const file of files) {
-    try {
-      busy(true, `上传中 ${++done}/${files.length}…`);
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
-      const base = `media/works/${colId}/${uid()}`;
-
-      if (isImage) {
-        let src, ext = 'jpg';
-        if (mode.maxSide === 0) {
-          // 原图直传：保留原始文件与扩展名
-          ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-          if (gh.ready && file.size > 45 * 1024 * 1024) {
-            toast(`${file.name} 超过 45MB，已自动转为高画质压缩`, 'err');
-            src = await storeMedia(await compressImage(file, 3000, .94), base, 'jpg');
-            ext = 'jpg';
-          } else {
-            src = await storeMedia(file, base, ext);
-          }
-        } else {
-          src = await storeMedia(await compressImage(file, mode.maxSide, mode.q), base, 'jpg');
-        }
-        // 缩略图始终生成，保证首页加载速度
-        const thumb = await compressImage(file, 700, .8);
-        const th = await storeMedia(thumb, base + '-t', 'jpg');
-        col.items.push({ id: uid(), src, thumb: th, kind: 'image', title: cleanName(file.name), star: col.items.length < 3 });
-      } else if (isVideo) {
-        if (gh.ready && file.size > 45 * 1024 * 1024) {
-          toast(`${file.name} 超过 45MB，建议压缩后再传`, 'err');
-          continue;
-        }
-        const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-        const src = await storeMedia(file, base, ext);
-        const poster = await videoPoster(file).catch(() => null);
-        const posterPath = poster ? await storeMedia(poster, `${base}-p`, 'jpg') : '';
-        col.items.push({ id: uid(), src, poster: posterPath, thumb: posterPath, kind: 'video', title: cleanName(file.name), star: col.items.length < 3 });
-      } else {
-        toast(`${file.name} 不是图片或视频，已跳过`, 'err');
+  async function runUpload() {
+    if (running) return;
+    const pending = items.filter(i => i.status === 'pending' || i.status === 'error');
+    if (!pending.length) return toast('没有待上传的文件', '');
+    running = true; startBtn.disabled = true; startBtn.textContent = '上传中…';
+    const mode = QUALITY[quality] || QUALITY.high;
+    const CONC = 3;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < pending.length) {
+        const it = pending[cursor++];
+        await uploadOne(it, mode, target, folder);
       }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONC, pending.length) }, worker));
+    running = false; startBtn.disabled = false; startBtn.textContent = '开始上传';
+    refreshSummary();
+    const added = items.filter(i => i.status === 'done' && i.result);
+    if (added.length) {
+      for (const it of added) {
+        col.items.push({
+          id: uid(), src: it.result.src, thumb: it.result.thumb || '',
+          poster: it.result.poster || '', kind: it.result.kind,
+          title: cleanName(it.file.name), star: col.items.length < 3,
+        });
+      }
+      changed();
+      toast(`已上传 ${added.length} 件，记得点「发布」`, 'ok');
+    }
+    const failed = items.filter(i => i.status === 'error');
+    if (failed.length) toast(`${failed.length} 个上传失败，可点 ↻ 重试`, 'err');
+  }
+
+  async function uploadOne(it, mode, target, folder) {
+    if (!it.file) return;
+    setStatus(it, 'uploading', '上传中…'); setProgress(it, 0);
+    const name = uid();
+    try {
+      if (target === 'cos') {
+        const cfg = cosCfg();
+        if (it.kind === 'image') {
+          const blob = mode.maxSide === 0 ? it.file : await compressImage(it.file, mode.maxSide, mode.q);
+          const ctype = mode.maxSide === 0 ? (it.file.type || 'image/jpeg') : 'image/jpeg';
+          await cosPut(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.85));
+          const thumb = await compressImage(it.file, 700, .8);
+          await cosPut(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.85 + p * 0.15));
+          it.result = { src: `https://${cfg.host}/Photos/${folder}/${name}.jpg`, thumb: `https://${cfg.host}/Photos/${folder}/${name}-t.jpg`, kind: 'image' };
+        } else {
+          const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+          if (it.file.size > 200 * 1024 * 1024) throw new Error('视频超过 200MB，建议压缩后上传');
+          await cosPut(`Photos/${folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
+          const poster = await videoPoster(it.file).catch(() => null);
+          let posterUrl = '';
+          if (poster) {
+            await cosPut(`Photos/${folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
+            posterUrl = `https://${cfg.host}/Photos/${folder}/${name}-p.jpg`;
+          } else setProgress(it, 1);
+          it.result = { src: `https://${cfg.host}/Photos/${folder}/${name}.${ext}`, poster: posterUrl, thumb: posterUrl, kind: 'video' };
+        }
+      } else if (target === 'github') {
+        const base = `media/works/${col.id}/${name}`;
+        if (it.kind === 'image') {
+          let src, ext = 'jpg';
+          if (mode.maxSide === 0) {
+            if (gh.ready && it.file.size > 45 * 1024 * 1024) {
+              src = await storeMedia(await compressImage(it.file, 3000, .94), base, 'jpg'); ext = 'jpg';
+            } else {
+              ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+              src = await storeMedia(it.file, base, ext);
+            }
+          } else {
+            src = await storeMedia(await compressImage(it.file, mode.maxSide, mode.q), base, 'jpg');
+          }
+          setProgress(it, 0.85);
+          const thumb = await storeMedia(await compressImage(it.file, 700, .8), base + '-t', 'jpg');
+          it.result = { src, thumb, kind: 'image' };
+        } else {
+          const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase();
+          if (it.file.size > 45 * 1024 * 1024) throw new Error('视频超过 45MB，建议压缩后再传');
+          const src = await storeMedia(it.file, base, ext);
+          setProgress(it, 0.85);
+          const poster = await videoPoster(it.file).catch(() => null);
+          const posterPath = poster ? await storeMedia(poster, `${base}-p`, 'jpg') : '';
+          it.result = { src, poster: posterPath, thumb: posterPath, kind: 'video' };
+        }
+      } else {
+        // 本地预览：转 dataURL（不保存，仅本机）
+        if (it.kind === 'image') {
+          const blob = mode.maxSide === 0 ? it.file : await compressImage(it.file, mode.maxSide, mode.q);
+          it.result = { src: await blobToDataURL(blob), thumb: await blobToDataURL(await compressImage(it.file, 700, .8)), kind: 'image' };
+        } else {
+          it.result = { src: await blobToDataURL(it.file), thumb: '', poster: '', kind: 'video' };
+        }
+        setProgress(it, 1);
+      }
+      setProgress(it, 1);
+      setStatus(it, 'done', '✓ 已完成');
     } catch (e) {
-      toast(`${file.name} 上传失败：${e.message}`, 'err');
-    } finally {
-      busy(false);
+      setStatus(it, 'error', '✗ ' + (e.message || '失败'));
     }
   }
-  changed();
-  toast(gh.ready ? '上传完成，记得点「发布」' : '已加入本地预览（未连接仓库，不会保存到线上）', gh.ready ? 'ok' : '');
+
+  const box = el('div', {},
+    el('div', { class: 'tip' }, `目标存储：${targetText}`),
+    field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
+    drop,
+    list,
+    summary,
+    el('div', { class: 'drawer-actions', style: 'margin-top:16px' }, clearBtn, addBtn, startBtn)
+  );
+  openDrawer(`上传作品 · ${col.title || '未命名专栏'}`, box);
 }
 
 export function toggleStar(kind, colId, itemId) {
@@ -667,6 +837,36 @@ function isRemoteUrl(u) { return /^https?:\/\//i.test((u || '').trim()); }
    地址存本机 localStorage，未配置时只改本地数据、不报错。 */
 function getCosSyncUrl() { return (localStorage.getItem('mg_cos_sync_url') || '').trim(); }
 function setCosSyncUrl(v) { v ? localStorage.setItem('mg_cos_sync_url', v.trim()) : localStorage.removeItem('mg_cos_sync_url'); }
+
+/**
+ * 管理面板里的「COS 直传配置」区块：填 SecretId/Key/Bucket/Region（仅存本机浏览器），
+ * 上传时浏览器用 V1 签名直接 PUT 到桶，无需云函数。
+ */
+function cosConfigBox() {
+  const cfg = cosCfg();
+  const idIn = input({ id: 'f_cos_id', value: cfg.secretId, placeholder: 'AKID...' });
+  const keyIn = input({ id: 'f_cos_key', type: 'password', value: cfg.secretKey, placeholder: 'SecretKey（只存本机浏览器）' });
+  const bucketIn = input({ id: 'f_cos_bucket', value: cfg.bucket, placeholder: 'miragedgeist-1463128155' });
+  const regionIn = input({ id: 'f_cos_region', value: cfg.region, placeholder: 'ap-guangzhou' });
+  const status = el('div', { class: 'hint', style: 'margin-top:8px' },
+    cosReady() ? '✅ 已配置，上传将直传 COS（Photos/<专栏>/）' : '未配置：上传会退回 GitHub / 本机预览');
+  return el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
+    field('COS 直传配置（浏览器直传，无需云函数）', el('div', {}, idIn, keyIn, bucketIn, regionIn),
+      'SecretId/Key 只存在你浏览器本地，不会上传任何服务器。<b>建议用子账号密钥，仅授予该桶读写权限</b>。'
+      + '首次使用前需在 COS 控制台开启 CORS：来源填你的站点域名、允许方法勾 PUT/POST/GET/HEAD、'
+      + '暴露 Header 填 ETag/Content-Length/Authorization。'),
+    el('button', {
+      class: 'btn-ghost', style: 'width:100%;padding:10px',
+      onclick: () => {
+        saveCosCfg({ secretId: idIn.value, secretKey: keyIn.value, bucket: bucketIn.value, region: regionIn.value });
+        const ok = cosReady();
+        status.innerHTML = ok ? '✅ 已配置，上传将直传 COS（Photos/<专栏>/）' : '未配置：上传会退回 GitHub / 本机预览';
+        toast(ok ? 'COS 直传已配置' : '已清除 / 未填全', ok ? 'ok' : '');
+      },
+    }, '保存 COS 直传配置'),
+    status
+  );
+}
 
 /* 从 URL 提取 COS 域名基地址（兼容直链 cos.*.myqcloud.com 与 CDN *.file.myqcloud.com） */
 function cosBaseOf(u) {

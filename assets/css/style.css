@@ -362,9 +362,30 @@ select option{background:#f7f4f0}
 .seg button{flex:1;padding:8px;border-radius:9px;font-size:12.5px;color:var(--txt-2);transition:.2s}
 .seg button.on{background:var(--accent);color:#fff}
 .up-zone{border:1.5px dashed var(--line-strong);border-radius:14px;padding:30px 18px;text-align:center;
-  color:var(--txt-3);font-size:13px;transition:.25s;cursor:pointer}
+  color:var(--txt-3);font-size:13px;transition:.25s;cursor:pointer;outline:none}
 .up-zone:hover,.up-zone.drag{border-color:var(--accent);color:var(--accent);background:rgba(184,125,110,.08)}
-.up-list{margin-top:14px;max-height:220px;overflow-y:auto}
+.up-zone:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px rgba(184,125,110,.22)}
+.up-list{margin-top:14px;max-height:300px;overflow-y:auto;padding-right:4px}
+.up-empty{text-align:center;color:var(--txt-3);font-size:12.5px;padding:10px}
+
+.up-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:12px;
+  background:rgba(255,255,255,.4);border:1px solid var(--line);margin-bottom:9px}
+.up-item.done{border-color:rgba(90,158,127,.4);background:rgba(90,158,127,.08)}
+.up-item.error{border-color:rgba(199,90,102,.45);background:rgba(199,90,102,.08)}
+.up-thumb{width:44px;height:44px;border-radius:9px;overflow:hidden;flex:none;background:#e8e4df;display:grid;place-items:center}
+.up-thumb img,.up-thumb video{width:100%;height:100%;object-fit:cover}
+.up-item-main{flex:1;min-width:0}
+.up-item-main b{display:block;font-size:12.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up-item-main span{font-size:11px;color:var(--txt-3)}
+.up-item-status{font-size:11px;color:var(--txt-2);margin:2px 0 4px}
+.up-item.done .up-item-status{color:var(--ok)}
+.up-item.error .up-item-status{color:var(--danger)}
+.up-bar{height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden}
+.up-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  border-radius:3px;transition:width .25s ease}
+.up-item.done .up-bar i{background:var(--ok)}
+.up-item.error .up-bar i{background:var(--danger);width:100%!important}
+.up-summary{font-size:11.5px;color:var(--txt-3);margin-top:8px;text-align:right}
 
 /* ---------- Toast / Busy ---------- */
 .toast-wrap{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:500;
