@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""腾讯云 SCF（Web 函数）— COS 专栏文件夹同步。
-用「Web 函数」创建，自带 HTTP 地址，不需要 API 网关触发（旧网关已迁移不可用）。
+"""腾讯云 SCF（事件函数）— COS 专栏文件夹同步。
+用「事件函数 + 函数 URL（公网）」部署，免 API 网关触发（旧网关已迁移不可用）。
 前端改名/移动图片时 POST 调用本函数。"""
 import os, json
 from qcloud_cos import CosConfig, CosS3Client

@@ -7,7 +7,8 @@
 
 1. 打开 [腾讯云 SCF 控制台](https://console.cloud.tencent.com/scf) → 函数服务 → **新建**
 2. 创建方式：**函数（事件函数）**（**不是 Web 函数！** Web 函数是 WSGI 透传模式，本代码是事件函数格式，不兼容）；运行环境选 **Python 3.10**；模板选 **空白**
-3. 把本目录 `index.py` 的内容粘贴到函数代码；`requirements.txt` 也一并上传（云函数会自动 `pip install` 依赖）
+3. 把本目录 `index.py` 上传到函数代码（**推荐用「上传文件」而不是粘贴**：手机粘贴 SCF 编辑器会自动加缩进，导致 `IndentationError`；用「上传文件」最稳）；`requirements.txt` 也一并上传（云函数会自动 `pip install` 依赖）。
+   - 不想传文件，也可直接下载已校正好的 `index.py`：`https://raw.githubusercontent.com/Mlinkr/MiragedGeist/main/cos-scf/index.py`
 4. 进入函数 **函数配置 → 环境变量**，添加四项（**注意是「环境变量」**，不是「标签」）：
    | 键 | 值 |
    |----|----|
