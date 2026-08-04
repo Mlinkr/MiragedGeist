@@ -155,6 +155,15 @@ export function openConsole() {
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => openProfileForm() }, '编辑名字 / 标签 / 简介'),
       qualityPicker(),
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => store.download() }, '导出 site.json 备份'),
+      el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
+        field('COS 同步服务地址（SCF）',
+          input({ id: 'f_cos_sync', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/release/...' }),
+          '部署 cos-scf 云函数后填这里。改名专栏 / 移动图片时，桶里的文件夹和图片会自动跟着变。不填则只改网页、不同步桶。'),
+        el('button', {
+          class: 'btn-ghost', style: 'width:100%;padding:10px;margin-bottom:11px',
+          onclick: () => { setCosSyncUrl($('#f_cos_sync').value); toast('已保存 COS 同步地址', 'ok'); },
+        }, '保存 COS 同步地址')
+      ),
       el('button', {
         class: 'btn-ghost danger', style: 'width:100%;padding:11px',
         onclick: () => { if (confirmBox('断开连接会清除本机保存的 Token，确定吗？')) { gh.logout(); setEditing(false); closeDrawer(); toast('已断开'); } },
@@ -398,7 +407,7 @@ export function openCollectionForm(existing) {
       onclick: () => {
         c.title = $('#c_title').value.trim() || '未命名专栏';
         c.desc = $('#c_desc').value.trim();
-        if (!existing) store.data.works.push(c);
+        if (!existing) { c.id = c.title; store.data.works.push(c); }  // 新专栏 id=标题，即 COS 文件夹名
         changed(); closeDrawer();
         toast(existing ? '已保存' : '专栏已创建，点方块上传作品', 'ok');
       }
@@ -417,14 +426,21 @@ export function openCollectionForm(existing) {
 }
 
 /** 首页点标题直接改名 */
-export function renameCollection(kind, id) {
+export async function renameCollection(kind, id) {
   const col = store.findCollection('works', id);
   if (!col) return;
   const v = window.prompt('专栏名称', col.title || '');
   if (v === null) return;
-  col.title = v.trim() || '未命名专栏';
+  const newName = v.trim() || '未命名专栏';
+  if (newName === col.id) { col.title = newName; changed(); return; }
+  const oldId = col.id;          // id 即 COS 文件夹名，随之更新
+  col.id = newName;
+  col.title = newName;
+  colCosUrls(col, oldId, newName);  // 改写本专栏所有图片 URL 的文件夹
   changed();
   toast('已改名，记得发布', 'ok');
+  cosSync({ action: 'rename_folder', old: oldId, new: newName },
+          '桶内文件夹已同步重命名', '桶文件夹同步失败');
 }
 
 export function moveCollection(kind, idx, dir) {
@@ -645,6 +661,52 @@ export function removeItem(kind, colId, itemId) {
 /* 是否为远程地址（http/https）；否则视为站内相对路径 */
 function isRemoteUrl(u) { return /^https?:\/\//i.test((u || '').trim()); }
 
+/* ================= COS 桶文件夹同步 ================= */
+/* 把「专栏改名 / 图片移动」同步到腾讯云 COS 桶。需要用户自己部署的 SCF 后台（凭证不进前端）。
+   地址存本机 localStorage，未配置时只改本地数据、不报错。 */
+function getCosSyncUrl() { return (localStorage.getItem('mg_cos_sync_url') || '').trim(); }
+function setCosSyncUrl(v) { v ? localStorage.setItem('mg_cos_sync_url', v.trim()) : localStorage.removeItem('mg_cos_sync_url'); }
+
+/* 从 URL 提取 COS 域名基地址（兼容直链 cos.*.myqcloud.com 与 CDN *.file.myqcloud.com） */
+function cosBaseOf(u) {
+  const m = /^https:\/\/[^/]+\.myqcloud\.com\//.exec(u || '');
+  return m ? m[0] : '';
+}
+/* 把 URL 里的 Photos/<oldId>/ 改写为 Photos/<newId>/ */
+function rewriteCosFolder(u, oldId, newId) {
+  const base = cosBaseOf(u);
+  if (!base) return u;
+  const oldPath = `Photos/${oldId}/`, newPath = `Photos/${newId}/`;
+  return u.startsWith(base + oldPath) ? base + newPath + u.slice((base + oldPath).length) : u;
+}
+/* 整专栏改写 URL 文件夹名 */
+function colCosUrls(col, oldId, newId) {
+  for (const it of col.items || []) {
+    for (const k of ['src', 'thumb', 'poster']) {
+      if (it[k]) it[k] = rewriteCosFolder(it[k], oldId, newId);
+    }
+  }
+}
+/* 单张图片改写 URL 文件夹名 */
+function itemCosUrl(it, fromId, toId) {
+  for (const k of ['src', 'thumb', 'poster']) {
+    if (it[k]) it[k] = rewriteCosFolder(it[k], fromId, toId);
+  }
+}
+/* 调 SCF 后台；未配置地址则静默跳过 */
+async function cosSync(payload, okMsg, failMsg) {
+  const url = getCosSyncUrl();
+  if (!url) return;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const j = await res.json().catch(() => ({}));
+    if (!j.ok) throw new Error(j.err || '后台返回失败');
+    if (okMsg) toast(okMsg, 'ok');
+  } catch (e) {
+    toast((failMsg || '桶同步失败') + '：' + e.message, 'err');
+  }
+}
+
 /**
  * 添加外链图片：粘贴 URL（每行一个，支持 `url | 标题 | 缩略图url`）。
  * 外链图片直接由浏览器从图床/CDN 加载，不经过 GitHub，不占仓库空间、不耗 Pages 月流量，
@@ -708,17 +770,21 @@ export function editItemUrl(kind, colId, itemId) {
 }
 
 /** 移动作品到其它专栏：从源专栏移除、追加到目标专栏 */
-export function moveItem(kind, fromColId, itemId, toColId) {
+export async function moveItem(kind, fromColId, itemId, toColId) {
   if (!fromColId || !toColId || fromColId === toColId) return;
   const from = store.findCollection('works', fromColId);
   const to = store.findCollection('works', toColId);
   if (!from || !to) return;
   const it = from.items.find(i => i.id === itemId);
   if (!it) return;
+  itemCosUrl(it, fromColId, toColId);   // 改写该图片 URL 的文件夹
   from.items = from.items.filter(i => i.id !== itemId);
   to.items.push(it);
   changed();
   toast(`已移动到「${to.title || '未命名专栏'}」`, 'ok');
+  const file = (it.src.split('?')[0].split('/').pop() || '');
+  cosSync({ action: 'move_object', from: fromColId, to: toColId, file },
+          '桶内图片已同步移动', '桶图片同步失败');
 }
 
 /* ---------- 存储：连接了仓库就上传，否则退化为本地 dataURL ---------- */
