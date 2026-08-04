@@ -1239,7 +1239,7 @@
     },
     {
       "id": "ms92t7bf36gbo",
-      "title": "Kpop",
+      "title": "金玟庭",
       "desc": "",
       "items": [
         {
@@ -1435,8 +1435,7 @@
           "name": "夸克网盘",
           "url": "0https://pan.quark.cn/s/5dd1615cd27c"
         }
-      ],
-      "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Cut/ms9zcx629yb5i.jpg?imageMogr2/thumbnail/1600x"
+      ]
     },
     {
       "id": "msa1vbe3rhxv6",
@@ -1452,8 +1451,7 @@
           "name": "夸克网盘",
           "url": "https://pan.quark.cn/s/c1f6a107a450"
         }
-      ],
-      "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Cut/msa1yswguks21.jpg?imageMogr2/thumbnail/1600x"
+      ]
     },
     {
       "id": "msa22htyvk9re",
@@ -1469,8 +1467,7 @@
           "name": "夸克网盘",
           "url": "https://pan.quark.cn/s/ab61a0b57991"
         }
-      ],
-      "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Cut/msa239ss8ahnq.jpg?imageMogr2/thumbnail/1600x"
+      ]
     },
     {
       "id": "msa25vt92y8b3",
@@ -1486,8 +1483,7 @@
           "name": "夸克网盘",
           "url": "https://pan.quark.cn/s/b6b4a6d03193"
         }
-      ],
-      "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Cut/msa26tmnfiswy.jpg?imageMogr2/thumbnail/1600x"
+      ]
     },
     {
       "id": "msa2awpi7qs4s",
@@ -1499,9 +1495,8 @@
           "name": "百度网盘",
           "url": "https://pan.baidu.com/s/1OjtBq64SdKn9z6O06dD8cg?pwd=39Yw"
         }
-      ],
-      "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Cut/msa2c2idfg3zr.jpg?imageMogr2/thumbnail/1600x"
+      ]
     }
   ],
-  "updatedAt": "2026-08-04T04:55:00.000Z"
+  "updatedAt": "2026-08-04T08:13:54.488Z"
 }
