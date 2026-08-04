@@ -6,17 +6,19 @@
 ## 部署步骤（手机/电脑浏览器均可）
 
 1. 打开 [腾讯云 SCF 控制台](https://console.cloud.tencent.com/scf) → 函数服务 → **新建**
-2. 创建方式：**Web 函数**（或事件函数均可）；运行环境选 **Python 3.10**
+2. 创建方式：**Web 函数**（重点！Web 函数自带 HTTP 地址，**不用建 API 网关触发**——旧网关已迁移不可用）；运行环境选 **Python 3.10**
 3. 把本目录 `index.py` 的内容粘贴到函数代码；`requirements.txt` 也一并上传（云函数会自动 `pip install` 依赖）
-4. 进入函数 **函数配置 → 环境变量**，添加三项：
+4. 进入函数 **函数配置 → 环境变量**，添加四项：
    | 键 | 值 |
    |----|----|
    | `COS_SECRET_ID` | 你的 SecretId |
    | `COS_SECRET_KEY` | 你的 SecretKey |
    | `COS_BUCKET` | `miragedgeist-1463128155` |
    | `COS_REGION` | `ap-guangzhou` |
-5. **触发管理** → 创建 **API 网关触发**（Web 服务 / 公网访问），拿到一个 `https://xxxx.apigw.tencentcs.com/release/...` 地址
+5. 保存并**部署**后，Web 函数页面会直接给出一个 **访问路径 / 公网地址**（形如 `https://xxx.apigw.tencentcs.com/...` 或函数自带域名）。这就是要填到网站的地址。
 6. 网站里：管理面板 → 底部「COS 同步服务地址（SCF）」→ 粘贴这个地址 → 保存
+
+> 注意：**不要去「触发管理」建 API 网关触发**，腾讯云 API 网关已迁移，旧触发方式现在建不出来。Web 函数自带访问地址，足够用。
 
 ## 接口
 

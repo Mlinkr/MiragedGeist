@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""腾讯云 SCF — COS 专栏文件夹同步（事件函数）。前端改名/移动图片时调用。"""
+"""腾讯云 SCF（Web 函数）— COS 专栏文件夹同步。
+用「Web 函数」创建，自带 HTTP 地址，不需要 API 网关触发（旧网关已迁移不可用）。
+前端改名/移动图片时 POST 调用本函数。"""
 import os, json
 from qcloud_cos import CosConfig, CosS3Client
 
@@ -22,9 +24,27 @@ def _ls(prefix):
     return ks
 
 
+def _resp(code, obj):
+    # Web 函数 / API 网关 都认这个返回格式；带 CORS 头以支持浏览器跨域调用
+    return {
+        'statusCode': code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST,OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        },
+        'body': json.dumps(obj, ensure_ascii=False),
+        'isBase64Encoded': False,
+    }
+
+
 def main_handler(event, context):
+    # 浏览器跨域 POST 会先发 OPTIONS 预检，直接放行
+    if str(event.get('httpMethod', '')).upper() == 'OPTIONS':
+        return _resp(200, {'ok': True})
     if client is None:
-        return {'statusCode': 500, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'})}
+        return _resp(500, {'ok': False, 'err': 'COS 凭证未配置'})
     try:
         b = event.get('body', '{}')
         if isinstance(b, str):
@@ -37,13 +57,13 @@ def main_handler(event, context):
                                    CopySource={'Bucket': BUCKET, 'Key': k, 'Region': REGION})
             for k in _ls(o):
                 client.delete_object(Bucket=BUCKET, Key=k)
-            return {'statusCode': 200, 'body': json.dumps({'ok': True})}
+            return _resp(200, {'ok': True})
         if a == 'move_object':                   # 单图移动：复制后删旧
             s = 'Photos/%s/%s' % (b['from'], b['file'])
             d = 'Photos/%s/%s' % (b['to'], b['file'])
             client.copy_object(Bucket=BUCKET, Key=d, CopySource={'Bucket': BUCKET, 'Key': s, 'Region': REGION})
             client.delete_object(Bucket=BUCKET, Key=s)
-            return {'statusCode': 200, 'body': json.dumps({'ok': True})}
-        return {'statusCode': 200, 'body': json.dumps({'ok': False, 'err': 'unknown action'})}
+            return _resp(200, {'ok': True})
+        return _resp(200, {'ok': False, 'err': 'unknown action'})
     except Exception as e:
-        return {'statusCode': 200, 'body': json.dumps({'ok': False, 'err': str(e)})}
+        return _resp(200, {'ok': False, 'err': str(e)})
