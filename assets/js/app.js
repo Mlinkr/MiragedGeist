@@ -567,6 +567,7 @@ function downloadName(it, isVideo) {
   const base = (it.title || urlName.replace(/\.[^.]+$/, '') || (isVideo ? 'video' : 'image'));
   return base + '.' + ext;
 }
+/* 跨域友好的"一键下载"：先 fetch 成 blob 触发下载；返回 true/false 表示是否成功 */
 async function downloadViaBlob(url, filename) {
   try {
     const res = await fetch(url, { mode: 'cors', referrerPolicy: 'no-referrer' });
@@ -577,8 +578,9 @@ async function downloadViaBlob(url, filename) {
     a.href = objUrl; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+    return true;
   } catch {
-    window.open(url, '_blank', 'noopener'); // 跨域未开 CORS：回退到新标签，访客可手动长按/右键保存
+    return false; // 跨域未开 CORS 时交由调用方决定 fallback
   }
 }
 
@@ -589,15 +591,27 @@ function cloudinaryAttachmentUrl(u){
   return u.replace('/image/upload/', '/image/upload/fl_attachment/');
 }
 
+/* 腾讯云 COS：检测 + 构建查看 URL */
+const COS_HOST_RE = /\.cos\.[-\w]+\.myqcloud\.com$/;
+function isCosUrl(u){ try { return COS_HOST_RE.test(new URL(u, location.href).hostname); } catch{ return false; } }
+function cosViewUrl(src){
+  /* 灯箱查看用：加数据万象缩放，避免加载 28MB 原图 */
+  if (!isCosUrl(src)) return src;
+  const sep = src.includes('?') ? '|' : '?';
+  return `${src}${sep}imageMogr2/thumbnail/2000x/quality/90`;
+}
+
 function paintLightbox() {
   const it = lbItems[lbIndex];
   if (!it) return;
   const stage = $('#lbStage');
   stage.innerHTML = '';
   const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
+  /* 图片：COS 用数据万象缩略版查看(快)，非 COS 用原图 */
+  const viewSrc = isVideo ? it.src : (isCosUrl(it.src) ? cosViewUrl(it.src) : it.src);
   stage.append(isVideo
     ? el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' })
-    : el('img', { src: it.src, referrerpolicy: 'no-referrer', alt: '' }));
+    : el('img', { src: viewSrc, referrerpolicy: 'no-referrer', alt: '' }));
 
   const cap = $('#lbCap');
   cap.innerHTML = '';
@@ -611,10 +625,15 @@ function paintLightbox() {
   dlBtn.onclick = (e) => {
     e.preventDefault();
     if (isCloudinaryUrl(it.src)) {
-      // 服务端强制下载原图，彻底不依赖 CORS（Cloudinary 会按 public_id 自动取名）
       window.open(cloudinaryAttachmentUrl(it.src), '_blank', 'noopener');
     } else {
-      downloadViaBlob(it.src, downloadName(it, isVideo)); // GitHub 同域/R2(开CORS) 走 blob 一键下载
+      const name = downloadName(it, isVideo);
+      downloadViaBlob(it.src, name).then(ok => {
+        if (!ok) {
+          toast('已开始新标签打开，请长按图片选择「存储到文件」');
+          window.open(it.src, '_blank', 'noopener');
+        }
+      });
     }
   };
   cap.append(dlBtn);
