@@ -16,6 +16,10 @@
 
 const LS_RELAY = 'mg_cos_sync_url';
 
+// 清理上一版「浏览器直传」遗留在本机浏览器的 COS 密钥（现已改为服务端中转，
+// 密钥不应留在前端）。无遗留则无副作用。
+['mg_cos_id', 'mg_cos_key'].forEach(k => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+
 /** 是否配置了中转地址（同一个地址同时用于上传与改名/移动同步） */
 export function cosReady() {
   return !!((localStorage.getItem(LS_RELAY) || '').trim());
