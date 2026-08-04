@@ -72,7 +72,7 @@ def _api(method, path, params=None, data=None, headers=None, parse=False):
     hdrs['Authorization'] = _sign(method, path, params, hdrs)
     req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
             txt = r.read()
     except urllib.error.HTTPError as e:
         txt = e.read()
