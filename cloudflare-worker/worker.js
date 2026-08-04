@@ -1,80 +1,46 @@
-/**
- * Cloudflare Worker —— Cloudinary 签名上传代理
- * ------------------------------------------------------------------
- * 作用：浏览器（手机）直传 Cloudinary 原画质大图时，需要 API Secret 做签名。
- *       但 Secret 绝不能发给前端。本 Worker 把 Secret 放在【环境变量】里，
- *       只向前端返回一个「一次性签名」，前端拿签名 + API Key 直接传原图。
- *
- * 优点：
- *   - 突破免签名上传 10MB 上限 → 原图任意大小（Cloudinary 单文件上限 100MB）。
- *   - Secret 只存在 Worker 环境变量，前端/仓库/GitHub 都看不到。
- *   - 每个签名带 timestamp，几分钟内有效，无法被复用盗传。
- *
- * 部署后，前端（upload-cloudinary.html）填 Worker 地址即可用。
- *
- * 环境变量（Cloudflare 控制台 → Worker → Settings → Variables）：
- *   CLOUDINARY_CLOUD_NAME   e.g. gopfeu83
- *   CLOUDINARY_API_KEY      e.g. 864775887227493
- *   CLOUDINARY_API_SECRET   ← 只放这里，绝不下发前端
- */
+// 腾讯云 COS 预签名上传 Worker（手机直传原画质大图，SecretKey 只存 Worker 环境变量）
+// 流程：前端 POST {folder,filename} → Worker 返回一次性预签名 PUT URL → 前端直传 COS（不绕 Worker，不限大小）
+// 环境变量：COS_SECRET_ID  COS_SECRET_KEY  COS_BUCKET  COS_REGION
 
-// 用 Web Crypto 计算 SHA-1 的十六进制摘要（与 Cloudinary 规则一致）
-async function sha1Hex(str) {
-  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+function hex(buf){ return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
+async function hmacSha1(keyBytes, msgStr){
+  const key = await crypto.subtle.importKey('raw', keyBytes, {name:'HMAC', hash:'SHA-1'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msgStr));
+  return new Uint8Array(sig);
 }
-
-// 按 Cloudinary 规则生成签名：
-// 把参与签名的参数（不含 file / api_key / signature）按 key 排序，
-// 拼成 key=value&key=value，末尾追加上 Secret，再 SHA-1。
-async function makeSignature(params, secret) {
-  const raw = Object.keys(params)
-    .sort()
-    .map(k => `${k}=${params[k]}`)
-    .join('&') + secret;
-  return sha1Hex(raw);
-}
-
-function corsHeaders() {
-  return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': 'content-type',
-  };
+async function sha1Hex(str){
+  const d = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
+  return hex(d);
 }
 
 export default {
-  async fetch(request, env) {
-    // 预检请求
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
-    }
-    if (request.method !== 'POST') {
-      return new Response('Method Not Allowed. POST JSON { folder } to /sign', { status: 405 });
-    }
+  async fetch(request, env){
+    if(request.method !== 'POST')
+      return new Response('POST {folder,filename} 获取 COS 预签名上传 URL', {status:405});
+    let body={}; try{ body = await request.json(); }catch{}
 
-    let body = {};
-    try { body = await request.json(); } catch { /* 允许空 body */ }
+    const folder = (body.folder||'Photos').replace(/^\/+|\/+$/g,'').replace(/[^\w\-]/g,'');
+    const filename = (body.filename||'').replace(/[^\w.\-]/g,'_');
+    if(!filename) return new Response('缺少 filename', {status:400});
 
-    // 前端可传 folder（如 Photos / Cut），默认 Photos
-    const folder = (body.folder && String(body.folder).trim()) || 'Photos';
+    const key = folder ? `${folder}/${filename}` : filename;
+    const now = Math.floor(Date.now()/1000);
+    const signTime = `${now-60};${now+600}`;                       // 有效期 10 分钟
+    const host = `${env.COS_BUCKET}.cos.${env.COS_REGION}.myqcloud.com`;
+    const path = '/' + key;
 
-    // timestamp 必须是秒级 Unix 时间戳（Cloudinary 要求）
-    const timestamp = Math.floor(Date.now() / 1000);
-    const params = { timestamp, folder };
-    const signature = await makeSignature(params, env.CLOUDINARY_API_SECRET || '');
+    // —— 与腾讯云 SDK 完全一致的签名算法 ——
+    const fmt = `put\n${path}\n\nhost=${host}\n`;                  // 注意：host 处是对象路径，真实 host 在 headers
+    const sha1 = await sha1Hex(fmt);
+    const strToSign = `sha1\n${signTime}\n${sha1}\n`;
+    const signKeyHex = hex(await hmacSha1(new TextEncoder().encode(env.COS_SECRET_KEY), signTime));
+    const sig = hex(await hmacSha1(new TextEncoder().encode(signKeyHex), strToSign));
 
-    const out = {
-      timestamp,
-      folder,
-      api_key: env.CLOUDINARY_API_KEY || '',
-      signature,
-      cloud: env.CLOUDINARY_CLOUD_NAME || '',
-    };
+    const presigned = `https://${host}/${key}?q-sign-algorithm=sha1&q-ak=${env.COS_SECRET_ID}`
+      + `&q-sign-time=${signTime}&q-key-time=${signTime}&q-header-list=host&q-url-param-list=&q-signature=${sig}`;
+    const pub = `https://${host}/${key}`;
 
-    return new Response(JSON.stringify(out), {
-      status: 200,
-      headers: { 'content-type': 'application/json', ...corsHeaders() },
-    });
-  },
+    return new Response(JSON.stringify({ url: presigned, public: pub, key, thumb: `${pub}?imageMogr2/thumbnail/1600x` }),
+      { headers: { 'content-type':'application/json', 'access-control-allow-origin':'*' } });
+  }
 };
