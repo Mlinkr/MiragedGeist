@@ -36,9 +36,11 @@ export function cosReady() {
 export function cosRelay(key, blob, contentType, onProgress) {
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) throw new Error('COS 中转地址未配置');
+  // 调试：打印实际请求 URL 和 base 长度（用于排查不可见字符/地址错误）
   const sep = base.includes('?') ? '&' : '?';
   const u = `${base}${sep}action=upload&key=${encodeURIComponent(key)}`
           + `&ct=${encodeURIComponent(contentType || 'application/octet-stream')}`;
+  console.log('[cosRelay] base=', JSON.stringify(base), 'len=' + base.length, 'url=', u);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', u);
@@ -59,7 +61,7 @@ export function cosRelay(key, blob, contentType, onProgress) {
       } catch { /* ignore */ }
       reject(new Error(msg));
     };
-    xhr.onerror = () => reject(new Error('网络错误：无法连接云函数中转地址'));
+    xhr.onerror = () => reject(new Error('网络错误：无法连接云函数中转地址（base len=' + base.length + ', url=' + u.slice(0, 120) + '）'));
     xhr.send(blob);
   });
 }
