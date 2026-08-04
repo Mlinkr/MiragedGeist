@@ -3,7 +3,7 @@ import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast,
 import { gh } from './github.js';
 import { store, DEFAULT_DATA } from './store.js';
 import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js';
-import { cosCfg, cosReady, saveCosCfg, cosPut } from './cos.js';
+import { cosReady, cosRelay } from './cos.js';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -156,15 +156,6 @@ export function openConsole() {
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => openProfileForm() }, '编辑名字 / 标签 / 简介'),
       qualityPicker(),
       el('button', { class: 'btn-ghost', style: 'width:100%;padding:11px;margin-bottom:11px', onclick: () => store.download() }, '导出 site.json 备份'),
-      el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
-        field('COS 同步服务地址（SCF）',
-          input({ id: 'f_cos_sync', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/release/...' }),
-          '部署 cos-scf 云函数后填这里。改名专栏 / 移动图片时，桶里的文件夹和图片会自动跟着变。不填则只改网页、不同步桶。'),
-      el('button', {
-        class: 'btn-ghost', style: 'width:100%;padding:10px;margin-bottom:11px',
-        onclick: () => { setCosSyncUrl($('#f_cos_sync').value); toast('已保存 COS 同步地址', 'ok'); },
-      }, '保存 COS 同步地址')
-      ),
       el('button', {
         class: 'btn-ghost danger', style: 'width:100%;padding:11px',
         onclick: () => { if (confirmBox('断开连接会清除本机保存的 Token，确定吗？')) { gh.logout(); setEditing(false); closeDrawer(); toast('已断开'); } },
@@ -584,7 +575,7 @@ function openUploader(col) {
   const folder = col.folder || folderOf(col) || col.title || col.id;
   const target = cosReady() ? 'cos' : (gh.ready ? 'github' : 'local');
   const targetText = target === 'cos'
-    ? `腾讯云 COS → Photos/${folder}/ ✅`
+    ? `腾讯云 COS（经云函数中转，密钥不暴露）✅`
     : target === 'github'
       ? `GitHub 仓库 media/works/${col.id}/`
       : `本机预览（未连接任何存储，不会保存）⚠`;
@@ -727,25 +718,25 @@ function openUploader(col) {
     const name = uid();
     try {
       if (target === 'cos') {
-        const cfg = cosCfg();
         if (it.kind === 'image') {
           const blob = mode.maxSide === 0 ? it.file : await compressImage(it.file, mode.maxSide, mode.q);
           const ctype = mode.maxSide === 0 ? (it.file.type || 'image/jpeg') : 'image/jpeg';
-          await cosPut(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.85));
+          if (blob.size > 8 * 1024 * 1024) throw new Error('图片过大（>8MB），请改用「高画质」压缩后再传');
+          const r1 = await cosRelay(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.85));
           const thumb = await compressImage(it.file, 700, .8);
-          await cosPut(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.85 + p * 0.15));
-          it.result = { src: `https://${cfg.host}/Photos/${folder}/${name}.jpg`, thumb: `https://${cfg.host}/Photos/${folder}/${name}-t.jpg`, kind: 'image' };
+          const r2 = await cosRelay(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.85 + p * 0.15));
+          it.result = { src: r1.url, thumb: r2.url, kind: 'image' };
         } else {
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
-          if (it.file.size > 200 * 1024 * 1024) throw new Error('视频超过 200MB，建议压缩后上传');
-          await cosPut(`Photos/${folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
+          if (it.file.size > 20 * 1024 * 1024) throw new Error('视频超过 20MB，中转可能超限，建议压缩后传');
+          const r1 = await cosRelay(`Photos/${folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
           const poster = await videoPoster(it.file).catch(() => null);
           let posterUrl = '';
           if (poster) {
-            await cosPut(`Photos/${folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
-            posterUrl = `https://${cfg.host}/Photos/${folder}/${name}-p.jpg`;
+            const r2 = await cosRelay(`Photos/${folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
+            posterUrl = r2.url;
           } else setProgress(it, 1);
-          it.result = { src: `https://${cfg.host}/Photos/${folder}/${name}.${ext}`, poster: posterUrl, thumb: posterUrl, kind: 'video' };
+          it.result = { src: r1.url, poster: posterUrl, thumb: posterUrl, kind: 'video' };
         }
       } else if (target === 'github') {
         const base = `media/works/${col.id}/${name}`;
@@ -839,31 +830,27 @@ function getCosSyncUrl() { return (localStorage.getItem('mg_cos_sync_url') || ''
 function setCosSyncUrl(v) { v ? localStorage.setItem('mg_cos_sync_url', v.trim()) : localStorage.removeItem('mg_cos_sync_url'); }
 
 /**
- * 管理面板里的「COS 直传配置」区块：填 SecretId/Key/Bucket/Region（仅存本机浏览器），
- * 上传时浏览器用 V1 签名直接 PUT 到桶，无需云函数。
+ * 管理面板里的「COS 中转地址」配置：只填云函数 URL（存本机浏览器），
+ * 浏览器把图发到云函数，由它在服务端用 COS 密钥直传桶——密钥永不进访客浏览器。
+ * 同一个地址同时服务「上传」与「改名 / 移动同步」。
  */
 function cosConfigBox() {
-  const cfg = cosCfg();
-  const idIn = input({ id: 'f_cos_id', value: cfg.secretId, placeholder: 'AKID...' });
-  const keyIn = input({ id: 'f_cos_key', type: 'password', value: cfg.secretKey, placeholder: 'SecretKey（只存本机浏览器）' });
-  const bucketIn = input({ id: 'f_cos_bucket', value: cfg.bucket, placeholder: 'miragedgeist-1463128155' });
-  const regionIn = input({ id: 'f_cos_region', value: cfg.region, placeholder: 'ap-guangzhou' });
+  const relayIn = input({ id: 'f_cos_relay', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/... 或 scf 函数URL' });
   const status = el('div', { class: 'hint', style: 'margin-top:8px' },
-    cosReady() ? '✅ 已配置，上传将直传 COS（Photos/<专栏>/）' : '未配置：上传会退回 GitHub / 本机预览');
+    cosReady() ? '✅ 已配置，上传经云函数中转（COS 密钥只在服务端，零暴露）' : '未配置：上传会退回 GitHub / 本机预览');
   return el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
-    field('COS 直传配置（浏览器直传，无需云函数）', el('div', {}, idIn, keyIn, bucketIn, regionIn),
-      'SecretId/Key 只存在你浏览器本地，不会上传任何服务器。<b>建议用子账号密钥，仅授予该桶读写权限</b>。'
-      + '首次使用前需在 COS 控制台开启 CORS：来源填你的站点域名、允许方法勾 PUT/POST/GET/HEAD、'
-      + '暴露 Header 填 ETag/Content-Length/Authorization。'),
+    field('COS 中转地址（云函数 URL）', relayIn,
+      '浏览器把图片发到这个云函数，由它在<b>服务端</b>用 COS 密钥直传桶——密钥只在服务器，访客浏览器完全拿不到，适合公开站点。'
+      + '同一个地址同时用于「上传」与「改名 / 移动同步」。部署时记得把云函数<b>执行超时设为 60 秒</b>。'),
     el('button', {
       class: 'btn-ghost', style: 'width:100%;padding:10px',
       onclick: () => {
-        saveCosCfg({ secretId: idIn.value, secretKey: keyIn.value, bucket: bucketIn.value, region: regionIn.value });
+        setCosSyncUrl(relayIn.value);
         const ok = cosReady();
-        status.innerHTML = ok ? '✅ 已配置，上传将直传 COS（Photos/<专栏>/）' : '未配置：上传会退回 GitHub / 本机预览';
-        toast(ok ? 'COS 直传已配置' : '已清除 / 未填全', ok ? 'ok' : '');
+        status.innerHTML = ok ? '✅ 已配置，上传经云函数中转（COS 密钥只在服务端，零暴露）' : '未配置：上传会退回 GitHub / 本机预览';
+        toast(ok ? 'COS 中转已配置' : '已清除', ok ? 'ok' : '');
       },
-    }, '保存 COS 直传配置'),
+    }, '保存 COS 中转地址'),
     status
   );
 }

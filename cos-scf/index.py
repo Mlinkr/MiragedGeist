@@ -5,7 +5,7 @@
 
 部署方式：事件函数 + 函数URL(公网)。详见 README.md
 """
-import os, json, time, hmac, hashlib, base64, urllib.request, urllib.error, urllib.parse
+import os, json, time, hmac, hashlib, base64, re, urllib.request, urllib.error, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 
@@ -57,7 +57,7 @@ def _sign(method, path, params=None, headers=None):
     return (f'q-sign-algorithm=sha1&q-ak={SID}&q-sign-time={kt}&q-key-time={kt}'
             f'&q-header-list={header_list}&q-url-param-list={param_list}&q-signature={signature}')
 
-def _api(method, path, params=None, data=None, headers=None, parse=False):
+def _api(method, path, params=None, data=None, headers=None, parse=False, timeout=10):
     hdrs = {'Host': HOST}
     if headers:
         hdrs.update(headers)
@@ -73,13 +73,44 @@ def _api(method, path, params=None, data=None, headers=None, parse=False):
     hdrs['Authorization'] = _sign(method, path, params, hdrs)
     req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             txt = r.read()
     except urllib.error.HTTPError as e:
         txt = e.read()
     if parse:
         return ET.fromstring(txt)
     return txt
+
+def do_upload(event, q):
+    """中转上传：浏览器把文件 POST 过来（二进制 body + query 里的 key/ct），
+    由本函数在服务端用 COS 密钥签名后直传桶。密钥不离开服务器。"""
+    if not SID or not SKEY:
+        return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
+    key = (q.get('key') or '').strip()
+    if not key:
+        return {'statusCode': 400, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 key'}, ensure_ascii=False), 'isBase64Encoded': False}
+    ct = q.get('ct') or 'application/octet-stream'
+    raw = event.get('body', '')
+    if event.get('isBase64Encoded'):
+        try:
+            data = base64.b64decode(raw)
+        except Exception:
+            data = raw.encode('latin1') if isinstance(raw, str) else (raw or b'')
+    elif isinstance(raw, bytes):
+        data = raw
+    else:
+        data = raw.encode('latin1') if isinstance(raw, str) else (raw or b'')
+    if not data:
+        return {'statusCode': 400, 'headers': H, 'body': json.dumps({'ok': False, 'err': '空文件'}, ensure_ascii=False), 'isBase64Encoded': False}
+    try:
+        _api('PUT', '/' + key, data=data, headers={'Content-Type': ct}, timeout=55)
+    except Exception as e:
+        msg = str(e)
+        m = re.search(r'<Message>([^<]+)</Message>', msg)
+        if m: msg = m.group(1)
+        return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': '上传失败：' + msg}, ensure_ascii=False), 'isBase64Encoded': False}
+    url = 'https://%s/%s' % (HOST, urllib.parse.quote(key, '/-_.~'))
+    return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True, 'key': key, 'url': url}, ensure_ascii=False), 'isBase64Encoded': False}
 
 def _ls(prefix):
     ks, m = [], ''
@@ -106,6 +137,10 @@ def _ls(prefix):
 def main_handler(event, context):
     if str(event.get('httpMethod', '')).upper() == 'OPTIONS':
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True}, ensure_ascii=False), 'isBase64Encoded': False}
+    # 中转上传：二进制 body + query action=upload（在解析 JSON 之前分流）
+    q = event.get('queryString') or event.get('queryStringParameters') or {}
+    if str(q.get('action', '')).lower() == 'upload':
+        return do_upload(event, q)
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
     try:

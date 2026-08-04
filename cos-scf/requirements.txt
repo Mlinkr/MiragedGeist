@@ -1,1 +1,2 @@
-cos-python-sdk-v5>=1.9.0
+# 本云函数仅使用 Python 标准库（os/json/time/hmac/hashlib/base64/urllib/xml），
+# 无需任何第三方依赖，保持 requirements.txt 为空即可（云函数会自动跳过安装）。
