@@ -107,20 +107,6 @@ def main_handler(event, context):
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True}, ensure_ascii=False), 'isBase64Encoded': False}
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
-    # 调试：POST body 以 __debug__ 开头时回显收到的事件（仅排查用，不影响正常功能）
-    _raw = event.get('body', '')
-    if isinstance(_raw, str) and _raw.startswith('__debug__'):
-        try:
-            _dec = base64.b64decode(_raw).decode('utf-8', 'replace')
-        except Exception:
-            _dec = None
-        return {'statusCode': 200, 'headers': H, 'body': json.dumps({
-            'keys': sorted(event.keys()),
-            'isBase64Encoded': event.get('isBase64Encoded'),
-            'body_type': type(_raw).__name__,
-            'body_raw': _raw[:300],
-            'body_if_b64_decoded': _dec[:300] if _dec else None,
-        }, ensure_ascii=False), 'isBase64Encoded': False}
     try:
         b = event.get('body', '{}')
         # 腾讯云函数 URL / API 网关 在部分情况下会把请求体做 base64 编码并置 isBase64Encoded=true
