@@ -4,7 +4,7 @@ import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast,
 import { gh } from './github.js?v=5';
 import { store, DEFAULT_DATA } from './store.js?v=5';
 import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=5';
-import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=5';
+import { cosReady, cosRelay, cosRelayPresigned, cosDiagnose } from './cos.js?v=6';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -577,7 +577,7 @@ function describeError(e) {
   const m = (e && e.message) || String(e || '未知错误');
   if (/abort|取消/i.test(m)) return '已取消';
   if (/超时|timeout/i.test(m)) return m;
-  if (/CORS|跨域|Access-Control/i.test(m)) return '跨域被拦截：请确认云函数已开启 CORS（Access-Control-Allow-Origin: *）';
+  if (/CORS|跨域|Access-Control/i.test(m)) return '跨域被拦截：大文件请确认桶 CORS 允许 PUT（v4.0 预签名直传模式）';
   if (/network|网络|DNS|TLS|连接|offline/i.test(m)) return '网络错误：无法连接服务器，请检查网络后重试';
   if (/8MB|20MB|45MB|过大|Payload|413/i.test(m)) return m;
   if (/未配置|not configured/i.test(m)) return '存储未配置：请先在管理面板填写 COS 中转地址或连接 GitHub';
@@ -588,7 +588,7 @@ function openUploader(col) {
   const folder = col.folder || folderOf(col) || col.title || col.id;
   const target = cosReady() ? 'cos' : (gh.ready ? 'github' : 'local');
   const targetText = target === 'cos'
-    ? `腾讯云 COS（经云函数中转，密钥不暴露）✅`
+    ? `腾讯云 COS（v4.0 预签名直传，大图无限制）✅`
     : target === 'github'
       ? `GitHub 仓库 media/works/${col.id}/`
       : `本机预览（未连接任何存储，不会保存）⚠`;
@@ -770,7 +770,8 @@ function openUploader(col) {
   /** 判断错误是否属于「可降级」类型（网络/CORS/超时），这类错误换一条路径可能成功 */
   function isFallbackError(e) {
     const m = (e && e.message) || '';
-    return /网络|CORS|跨域|超时|timeout|连接|DNS|TLS|offline/i.test(m);
+    // v4.0: 「跨域」不再降级（大图已自动走预签名直传；仍报跨域=桶 CORS 未配置，应提示用户而非静默降级到 GitHub）
+    return /网络|超时|timeout|连接|DNS|TLS|offline/i.test(m);
   }
 
   async function uploadOne(it, ctx) {
@@ -934,7 +935,7 @@ function openUploader(col) {
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.2')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v4.0')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
@@ -989,7 +990,7 @@ function setCosSyncUrl(v) { v ? localStorage.setItem('mg_cos_sync_url', v.trim()
 function cosConfigBox() {
   const relayIn = input({ id: 'f_cos_relay', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/... 或 scf 函数URL' });
   const status = el('div', { class: 'hint', style: 'margin-top:8px' },
-    cosReady() ? '✅ 已配置，上传经云函数中转（COS 密钥只在服务端，零暴露）' : '未配置：上传会退回 GitHub / 本机预览');
+    cosReady() ? '✅ 已配置，v4.0 预签名直传（大图无限制，密钥不暴露）' : '未配置：上传会退回 GitHub / 本机预览');
   const diagResult = el('div', { class: 'hint', style: 'margin-top:6px;font-size:12px;color:var(--text2);display:none' });
   return el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
     field('COS 中转地址（云函数 URL）', relayIn,
@@ -1000,7 +1001,7 @@ function cosConfigBox() {
       onclick: () => {
         setCosSyncUrl(relayIn.value);
         const ok = cosReady();
-        status.innerHTML = ok ? '✅ 已配置，上传经云函数中转（COS 密钥只在服务端，零暴露）' : '未配置：上传会退回 GitHub / 本机预览';
+        status.innerHTML = ok ? '✅ 已配置，v4.0 预签名直传（大图无限制，密钥不暴露）' : '未配置：上传会退回 GitHub / 本机预览';
         toast(ok ? 'COS 中转已配置' : '已清除', ok ? 'ok' : '');
       },
     }, '保存 COS 中转地址'),

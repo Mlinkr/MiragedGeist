@@ -2,29 +2,32 @@
  * 腾讯云 COS · 浏览器经云函数（SCF）中转上传
  * -----------------------------------------------------------
  * 安全模型：COS SecretId/SecretKey 只存在于云函数服务端，
- *   浏览器把图片/视频 POST 到中转地址，由云函数签名后直传桶。
+ *   浏览器通过两阶段上传：先向 SCF 要预签名 URL，再直传桶。
  *   访客浏览器完全拿不到任何 COS 凭证 —— 适合面向所有人的公开站点。
  *
- * 前置条件（在云函数部署时配置）：
+ * v4.0 核心变更：新增「预签名直传」模式（cosRelayPresigned）。
+ *   旧「base64 中转」模式（cosRelay）保留为小图 fallback。
+ *   预签名模式彻底绕开 SCF ~6MB 体量限制，支持任意大小文件。
+ *
+ * 两阶段流程：
+ *   Phase 1: 浏览器 POST {key, contentType} → SCF → 返回 presigned PUT URL
+ *   Phase 2: 浏览器 XHR PUT 原始文件 → COS 桶（直传，无体量限制）
+ *
+ * 前置条件：
  *   1) 云函数环境变量：COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION
- *   2) 云函数「执行超时时间」设为 60 秒（上传大图/视频需要）
- *   3) 云函数已开启「函数 URL」或 API 网关，且允许跨域（响应头
- *      Access-Control-Allow-Origin: *，允许方法 POST/OPTIONS）
- *
- * 与直传相比：桶本身【不需要】开 PUT CORS，跨域由云函数中转地址承担。
- *
- * v3 修复说明：
- *   - ★ 强制将入参 Blob 重新包装为 type='text/plain' 的新 Blob 再发送，
- *     防止手机浏览器用文件原始 MIME（如 image/jpeg）覆盖请求头、触发
- *     CORS 预检 OPTIONS，导致部分手机报「跨域被拦截」。
- *   - 错误信息附带 HTTP 状态码与响应摘要，方便排查。
- *   - XMLHttpRequest + upload.onprogress（真实进度）+ 120s 超时保护不变。
+ *   2) 云函数执行超时 ≥ 60s
+ *   3) 云函数已开启函数 URL
+ *   4) ★ COS 桶已配置 CORS 规则（允许来自 GitHub Pages 域名的 PUT）
+ *      （首次部署时由 SCF 自动设置，见 index.py 的 _ensure_cors）
  * =========================================================== */
 
 const LS_RELAY = 'mg_cos_sync_url';
 
 /** 上传超时（毫秒），应略大于云函数执行超时 */
 const UPLOAD_TIMEOUT_MS = 120_000;
+
+/** ★ v4.0: 超过此阈值自动切换到预签名直传模式（base64 编码后约 6MB = SCF 体量上限） */
+const PRESIGN_THRESHOLD_BYTES = 4 * 1024 * 1024; // 4MB 原始文件 → base64 后 ~5.3MB，安全范围内
 
 // 清理上一版「浏览器直传」遗留在本机浏览器的 COS 密钥（现已改为服务端中转，
 // 密钥不应留在前端）。无遗留则无副作用。
@@ -36,25 +39,94 @@ export function cosReady() {
 }
 
 /**
- * 经云函数中转，把一个对象传到 COS。
+ * ★ v4.0 主力上传方式：两阶段预签名直传（无体量限制）。
  *
- * 内部使用 XMLHttpRequest（而非 fetch），原因：
- *   - XHR.upload.onprogress 可实时报告上传进度（fetch 无此能力）
- *   - XHR.timeout + xhr.abort() 可靠地实现超时取消
- *   - 手机浏览器对 XHR POST 的兼容性久经考验
+ * Phase 1: 向 SCF POST action=presign（只传 key + contentType，几十字节）
+ *          → 拿到 COS 预签名 PUT URL
+ * Phase 2: XHR PUT 原始文件到该 URL（直传桶，支持任意大小）
  *
- * ★ v3 关键修复：send() 前把 Blob 转成 base64 字符串再发送（Content-Type 用 text/plain）。
- *   腾讯云函数 URL 收到 text/plain 二进制 body 时会按 UTF-8 转成字符串、
- *   原始字节将永久丢失、无法还原；改为 base64 字符串后云函数在服务端解回字节，
- *   图片才能完整上传到 COS 桶。text/plain 属于 CORS「简单请求」，不触发 OPTIONS 预检，手机端最稳。
+ * @param {string} key        对象键
+ * @param {Blob}   blob       文件内容
+ * @param {string} contentType MIME 类型
+ * @param {(p:number)=>void} [onProgress] 上传进度 0~1
+ * @returns {Promise<{ok:boolean,key:string,url:string}>}
+ */
+export function cosRelayPresigned(key, blob, contentType, onProgress) {
+  const base = (localStorage.getItem(LS_RELAY) || '').trim();
+  if (!base) return Promise.reject(new Error('COS 中转地址未配置'));
+  let urlBase = base.trim();
+  if (urlBase && !urlBase.startsWith('http://') && !urlBase.startsWith('https://')) {
+    urlBase = 'https://' + urlBase;
+  }
+
+  // Phase 1: 向 SCF 要预签名 URL
+  const sep = urlBase.includes('?') ? '&' : '?';
+  const presignUrl = `${urlBase}${sep}action=presign&key=${encodeURIComponent(key)}`
+                    + `&ct=${encodeURIComponent(contentType || 'application/octet-stream')}`;
+
+  return fetch(presignUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '' })
+    .then(r => {
+      if (!r.ok) throw new Error(`预签名请求失败(HTTP ${r.status})`);
+      return r.json();
+    })
+    .then(j => {
+      if (!j.ok) throw new Error(j.err || '预签名失败');
+      if (!j.putUrl) throw new Error('预签名响应缺少 putUrl');
+      return j.putUrl;
+    })
+    // Phase 2: 用 XHR PUT 原始文件直传 COS（有真实进度、超时保护）
+    .then(putUrl => new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.timeout = UPLOAD_TIMEOUT_MS;
+
+      if (onProgress) {
+        let lastT = 0;
+        xhr.upload.onprogress = evt => {
+          if (!evt.lengthComputable) return;
+          const now = Date.now();
+          if (now - lastT < 50) return;
+          lastT = now;
+          onProgress(Math.min(1, Math.max(0, evt.loaded / evt.total)));
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const finalUrl = 'https://' + (new URL(putUrl).host) + '/' + encodeURIComponent(key).replace(/%2F/g, '/');
+          resolve({ ok: true, key, url: finalUrl });
+        } else {
+          reject(new Error(`COS 直传返回 HTTP ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('COS 直传网络错误或跨域拦截（请确认桶 CORS 已配置允许来自本站的 PUT）'));
+      xhr.ontimeout = () => { xhr.abort(); reject(new Error(`COS 直传超时（${UPLOAD_TIMEOUT_MS / 1000}s）`)); };
+      xhr.onabort = () => reject(new Error('上传已取消'));
+
+      xhr.open('PUT', putUrl, true);
+      xhr.setRequestHeader('Content-Type', contentType || 'application/octet-stream');
+      xhr.send(blob);
+    }));
+}
+
+/**
+ * 经云函数中转上传（v3 兼容模式：base64 中转，受 ~6MB 体量限制）。
  *
- * @param {string} key        对象键，如 Photos/folder/name.jpg
- * @param {Blob}   blob        内容（原始图 / 缩略图 / 视频 / 封面帧）
- * @param {string} contentType 真实 MIME（通过 query 参数 ct 传给云函数）
- * @param {(p:number)=>void} [onProgress] 0~1 上传进度回调（每 ~50ms 触发一次）
+ * v4.0 起仅作为 cosRelayPresigned 的 fallback（小图/旧浏览器兼容）。
+ * 大图会自动切换到预签名直传模式。
+ *
+ * @param {string} key
+ * @param {Blob}   blob
+ * @param {string} contentType
+ * @param {(p:number)=>void} [onProgress]
  * @returns {Promise<{ok:boolean,key:string,url:string}>}
  */
 export function cosRelay(key, blob, contentType, onProgress) {
+  // ★ v4.0 智能路由：大图自动走预签名直传（无体量限制）
+  if (blob && blob.size > PRESIGN_THRESHOLD_BYTES) {
+    console.log('[cos] 文件', (blob.size / 1024 / 1024).toFixed(1), 'MB > 阈值，使用预签名直传');
+    return cosRelayPresigned(key, blob, contentType, onProgress);
+  }
+  // 小图：沿用 v3 base64 中转（兼容性好，无需桶 CORS）
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) throw new Error('COS 中转地址未配置');
 
@@ -176,7 +248,7 @@ export async function cosDiagnose() {
     results.push({ step: '2-fetchGET', ok: false, msg: `fetch GET 失败: ${e.message} ❌` });
   }
 
-  // Step 3: fetch POST 测试（测实际上传路径，发 1 字节）
+  // Step 3: fetch POST 测试（测 base64 中传路径，发 1 字节）
   try {
     const r = await fetch(base + '?action=upload&key=__diag__&ct=text/plain', {
       method: 'POST',
@@ -187,6 +259,21 @@ export async function cosDiagnose() {
     results.push({ step: '3-fetchPOST', ok: true, msg: `fetch POST ${r.status}: ${t.slice(0,80)} ✅` });
   } catch (e) {
     results.push({ step: '3-fetchPOST', ok: false, msg: `fetch POST 失败: ${e.message} ❌` });
+  }
+
+  // Step 4: presign 测试（测 v4.0 预签名直传路径）
+  try {
+    const r = await fetch(base + '?action=presign&key=__diag_presign__&ct=image/jpeg', {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '',
+    });
+    const j = await r.json();
+    if (j.ok && j.putUrl) {
+      results.push({ step: '4-presign', ok: true, msg: `presign OK, putUrl 长度 ${j.putUrl.length} ✅` });
+    } else {
+      results.push({ step: '4-presign', ok: false, msg: `presign 失败: ${(j.err||'').slice(0,80)} ❌` });
+    }
+  } catch (e) {
+    results.push({ step: '4-presign', ok: false, msg: `presign 失败: ${e.message} ❌` });
   }
 
   return results;

@@ -15,7 +15,7 @@ BUCKET = os.environ.get('COS_BUCKET', 'miragedgeist-1463128155')
 REGION = os.environ.get('COS_REGION', 'ap-guangzhou')
 HOST = f'{BUCKET}.cos.{REGION}.myqcloud.com'
 H = {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
-     'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type'}
+     'Access-Control-Allow-Methods': 'POST,OPTIONS,PUT', 'Access-Control-Allow-Headers': 'Content-Type'}
 
 # 参与签名的头部白名单（与腾讯云 COS SDK 的 filter_headers 保持一致）
 _VALID_HEADERS = {
@@ -113,8 +113,9 @@ def _body_bytes(raw, is_b64_event):
     return b''
 
 def do_upload(event, q):
-    """中转上传：浏览器把文件以 base64 字符串 POST 过来（body + query 里的 key/ct），
-    由本函数在服务端解码并用 COS 密钥签名后直传桶。密钥不离开服务器。"""
+    """中转上传（兼容旧前端）：浏览器把文件以 base64 字符串 POST 过来，
+    由本函数解码后用 COS 密钥签名直传桶。受 SCF 函数 URL ~6MB 体量限制，
+    大文件请改用 do_presign（预签名直传）。"""
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
     key = (q.get('key') or '').strip()
@@ -134,6 +135,44 @@ def do_upload(event, q):
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': '上传失败：' + msg}, ensure_ascii=False), 'isBase64Encoded': False}
     url = 'https://%s/%s' % (HOST, urllib.parse.quote(key, '/-_.~'))
     return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True, 'key': key, 'url': url}, ensure_ascii=False), 'isBase64Encoded': False}
+
+def do_presign(event, q):
+    """返回 COS 预签名 PUT URL（v4.0 新接口）。
+
+    前端流程：
+      1) 向本接口 POST {key, contentType} → 拿到 presignedUrl
+      2) 浏览器用 XHR PUT 原始文件到该 URL（直传桶，不经过 SCF）
+
+    优势：
+      - 无体量限制（SCF 只处理几十字节的元数据请求）
+      - 密钥不离开服务器（签名由 SCF 服务端完成）
+      - 上传进度真实可追踪（XHR.upload.onprogress）
+    """
+    if not SID or not SKEY:
+        return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
+    key = (q.get('key') or '').strip()
+    if not key:
+        return {'statusCode': 400, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 key'}, ensure_ascii=False), 'isBase64Encoded': False}
+    ct = q.get('ct') or 'application/octet-stream'
+    # 预签名有效期 15 分钟
+    now = int(time.time())
+    kt = f'{now-60};{now+900}'
+    sign_headers = {'content-type': ct, 'host': HOST}
+    auth = _sign('put', '/' + key, headers=sign_headers)
+    put_url = ('https://' + HOST + urllib.parse.quote(key, '/-_.~')
+               + '?q-sign-algorithm=sha1&q-ak=' + SID
+               + '&q-sign-time=' + kt + '&q-key-time=' + kt
+               + '&q-header-list=content-type;host'
+               + '&q-url-param-list='
+               + '&q-signature=' + auth.split('&q-signature=')[1] if '&q-signature=' in auth else '')
+    # 更简洁的拼法：直接用 _sign 返回值作为查询参数
+    put_url = 'https://' + HOST + '/' + urllib.parse.quote(key, '/-_.~') + '?' + _sign('put', '/' + key, headers={'content-type': ct})
+    return {'statusCode': 200, 'headers': H,
+            'body': json.dumps({'ok': True, 'key': key,
+                                'putUrl': put_url,
+                                'finalUrl': 'https://%s/%s' % (HOST, urllib.parse.quote(key, '/-_.~'))},
+                               ensure_ascii=False),
+            'isBase64Encoded': False}
 
 def _ls(prefix):
     ks, m = [], ''
@@ -160,15 +199,23 @@ def _ls(prefix):
 def main_handler(event, context):
     if str(event.get('httpMethod', '')).upper() == 'OPTIONS':
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True}, ensure_ascii=False), 'isBase64Encoded': False}
-    # 中转上传：二进制 body + query action=upload（在解析 JSON 之前分流）
+    # 中转上传 / 预签名：二进制 body + query action（在解析 JSON 之前分流）
     q = event.get('queryString') or event.get('queryStringParameters') or {}
-    if str(q.get('action', '')).lower() == 'upload':
+    action = str(q.get('action', '')).lower()
+    if action == 'upload':
         try:
             return do_upload(event, q)
         except Exception as e:
             # 任何未捕获异常都返回 200+CORS，避免浏览器因缺 CORS 头而误报「跨域」
             return {'statusCode': 200, 'headers': H,
                     'body': json.dumps({'ok': False, 'err': 'SCF 内部错误：' + str(e)}, ensure_ascii=False),
+                    'isBase64Encoded': False}
+    if action == 'presign':
+        try:
+            return do_presign(event, q)
+        except Exception as e:
+            return {'statusCode': 200, 'headers': H,
+                    'body': json.dumps({'ok': False, 'err': '预签名失败：' + str(e)}, ensure_ascii=False),
                     'isBase64Encoded': False}
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
