@@ -1075,7 +1075,10 @@ function cosConfigBox() {
       },
     }, '🔍 诊断连通性'),
     diagResult,
-    status
+    status,
+    el('a', { href: 'upload.html', target: '_blank', rel: 'noopener',
+      style: 'display:block;margin-top:12px;font-size:13px;color:#7aa2ff;text-decoration:underline' },
+      '→ 打开独立批量上传页（批量生成原图 / 缩略图外链，粘到专栏「🌐 粘贴外链图片」）')
   );
 }
 
