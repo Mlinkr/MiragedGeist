@@ -620,7 +620,9 @@ function openUploader(col) {
   });
 
   // 选择 / 拖拽区
-  const fileInput = el('input', { type: 'file', accept: 'image/*,video/*', multiple: 'multiple', style: 'display:none' });
+  // ★ iOS Safari 坑：accept="image/*" 会让系统对相册选图做「优化版 JPEG」重编码
+  //   （分辨率不变但压缩率更高 → 文件变小）。改用具体 MIME 类型避免触发重编码。
+  const fileInput = el('input', { type: 'file', accept: 'image/jpeg,image/png,image/heic,image/heif,video/*', multiple: 'multiple', style: 'display:none' });
   document.body.append(fileInput);
   const pick = () => fileInput.click();
   const drop = el('div', { class: 'up-zone', tabindex: '0' },
