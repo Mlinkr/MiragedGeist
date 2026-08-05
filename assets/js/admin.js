@@ -524,11 +524,11 @@ export function openFilmForm(existing) {
   const descIn = textarea({ id: 'f_desc', rows: 5, placeholder: '影视相关说明（支持简易 Markdown）' });
   descIn.value = f.desc || '';
 
-  const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '' });
+  const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '', title: '点击替换图片', style: 'cursor:pointer', onclick: () => pickFilmImage(f, imgEl, titleIn) });
   if (!f.image) imgEl.style.display = 'none';
-  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl) },
+  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl, titleIn) },
     el('div', {}, f.image ? '点击更换影视图片' : '点击上传影视图片'),
-    el('div', { class: 'hint' }, '海报 / 剧照，建议竖图')
+    el('div', { class: 'hint' }, '海报 / 剧照，建议竖图（点击图片即可替换）')
   );
 
   // 网盘链接动态列表
@@ -576,17 +576,31 @@ export function openFilmForm(existing) {
   openDrawer(existing ? '编辑影视' : '添加影视', box);
 }
 
-/** 影视图片：连接仓库就上传，否则退化为本地 dataURL（沿用改动前的写法） */
-async function pickFilmImage(f, imgEl) {
+/** 影视图片：与 Photos v5.0 同一套逻辑 —— COS 可用则原图直传桶的 Cut/ 文件夹，否则退化为 GitHub / dataURL */
+async function pickFilmImage(f, imgEl, titleIn) {
   const [file] = await pickFiles({ accept: 'image/*' });
   if (!file) return;
   busy(true, '上传影视图片…');
   try {
-    const blob = await compressImage(file, 1400, .92);
-    const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
-    f.image = path;
-    imgEl.src = path; imgEl.style.display = '';
-    toast('图片已选好，保存后生效', 'ok');
+    // ★ 与 Photos 上传器完全一致：cosReady() 时原图字节级直传桶的 Cut/ 文件夹
+    if (cosReady()) {
+      const ctype = file.type || 'image/jpeg';
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      // 子目录用影视名（用户可能还没点保存，f.title 还是空的，故读输入框当前值）
+      const folder = (titleIn && titleIn.value.trim()) || f.title || 'films';
+      const safeFolder = folder.replace(/[^\w一-龥\-]/g, '-') || 'films';
+      const r = await cosRelay(`Cut/${safeFolder}/${f.id}.${ext}`, file, ctype);
+      f.image = r.url;
+      imgEl.src = r.url; imgEl.style.display = '';
+      toast('图片已上传至腾讯云 COS（Cut 文件夹），保存后生效', 'ok');
+    } else {
+      // 兜底：GitHub 或本地 dataURL（COS 中转地址未配置时）
+      const blob = await compressImage(file, 1400, .92);
+      const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
+      f.image = path;
+      imgEl.src = path; imgEl.style.display = '';
+      toast('图片已选好，保存后生效', 'ok');
+    }
   } catch (e) {
     toast('上传失败：' + e.message, 'err');
   } finally {

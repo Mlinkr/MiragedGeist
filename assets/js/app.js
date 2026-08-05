@@ -3,7 +3,7 @@
 import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js?v=5';
 import { store, featuredOf, placeholder } from './store.js?v=5';
 import { PLATFORMS } from './social.js?v=5';
-import * as admin from './admin.js?v=10';
+import * as admin from './admin.js?v=11';
 
 /* ============ 渲染 ============ */
 
