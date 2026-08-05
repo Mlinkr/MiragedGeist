@@ -659,7 +659,18 @@ function openUploader(col) {
     for (const f of files) {
       const kind = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'other';
       if (kind === 'other') { toast(`${f.name} 不是图片或视频，已跳过`, 'err'); continue; }
-      const it = { id: uid(), file: f, kind, status: 'pending', progress: 0, err: '' };
+      const it = { id: uid(), file: f, kind, status: 'pending', progress: 0, err: '', dims: '' };
+      // 异步读取图片尺寸（用于诊断浏览器是否给了压缩版本）
+      if (kind === 'image') {
+        const img = new Image();
+        img.onload = () => {
+          it.dims = img.width + '×' + img.height;
+          const sz = it._node?.querySelector('.up-item-main span');
+          if (sz) sz.textContent = fmtSize(it.file.size) + ' · ' + it.dims + ' · 图片';
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(f);
+      }
       items.push(it);
       renderItem(it);
     }
