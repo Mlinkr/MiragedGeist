@@ -1038,6 +1038,24 @@
           "kind": "image",
           "title": "IMG 4258",
           "star": false
+        },
+        {
+          "id": "msfz3wcbys1og",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msfz3fywqd8e3.mp4",
+          "thumb": "",
+          "poster": "",
+          "kind": "video",
+          "title": "踩烟头",
+          "star": false
+        },
+        {
+          "id": "msfz4u89tc5k8",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msfz4s1wjnjky.jpeg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msfz4s1wjnjky-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 4262",
+          "star": false
         }
       ]
     },
@@ -1469,5 +1487,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-05T09:49:30.225Z"
+  "updatedAt": "2026-08-05T10:59:12.008Z"
 }
