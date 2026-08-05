@@ -579,7 +579,7 @@ function describeError(e) {
   if (/超时|timeout/i.test(m)) return m;
   if (/CORS|跨域|Access-Control/i.test(m)) return '跨域被拦截：大文件请确认桶 CORS 允许 PUT（v4.0 预签名直传模式）';
   if (/network|网络|DNS|TLS|连接|offline/i.test(m)) return '网络错误：无法连接服务器，请检查网络后重试';
-  if (/8MB|20MB|45MB|过大|Payload|413/i.test(m)) return m;
+  if (/8MB|20MB|45MB|过大|Payload|413/i.test(m)) return '文件过大：请检查 COS 桶存储配额或联系管理员';
   if (/未配置|not configured/i.test(m)) return '存储未配置：请先在管理面板填写 COS 中转地址或连接 GitHub';
   return m || '未知错误';
 }
@@ -788,29 +788,40 @@ function openUploader(col) {
 
     try {
       if (ctx.target === 'cos') {
-        /* ★ COS 上传：独立 try/catch，失败可降级到 GitHub */
+        /* ★ COS 上传：独立 try/catch */
         try {
           if (it.kind === 'image') {
-          // ---- 阶段 1：压缩原图 ----
-          setStatus(it, 'uploading', '压缩中…');
-          const blob = mode.maxSide === 0 ? it.file
-            : await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
-          checkTimeout();
-          const ctype = mode.maxSide === 0 ? (it.file.type || 'image/jpeg') : 'image/jpeg';
-          if (blob.size > 8 * 1024 * 1024) throw new Error('压缩后仍超过 8MB，请改用「标准」画质或选更小的图');
+          // ---- 阶段 1：确定上传内容 ----
+          // ★ v4.0: 「原图直传」= 零压缩、零修改、保留原始格式，直接走预签名直传（无大小限制）
+          //   高画质/标准模式才做客户端压缩（缩略图始终压缩到 700px）
+          const isOriginal = (mode.maxSide === 0);
+          setStatus(it, 'uploading', isOriginal ? '准备原图…' : '压缩中…');
+          let blob, ctype, ext;
+          if (isOriginal) {
+            blob = it.file;                                    // 原始文件，零修改
+            ctype = it.file.type || 'image/jpeg';
+            // 保留原始扩展名（支持 jpg/png/heic/webp 等）
+            ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+          } else {
+            blob = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+            checkTimeout();
+            ctype = 'image/jpeg';
+            ext = 'jpg';
+          }
+          // v4.0: 不再有 8MB 硬限制（预签名直传无体量上限）
           // ---- 阶段 2：上传原图到 COS ----
           setStatus(it, 'uploading', '上传中… (1/2)');
-          const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.80));
+          const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.${ext}`, blob, ctype, p => setProgress(it, p * 0.80));
           checkTimeout();
-          // ---- 阶段 3：生成并上传缩略图 ----
+          // ---- 阶段 3：生成并上传缩略图（始终压缩到 700px）----
           setStatus(it, 'uploading', '上传缩略图…');
           const thumb = await withTimeout(compressImage(it.file, 700, .8), 30_000, '缩略图压缩');
           checkTimeout();
           const r2 = await cosRelay(`Photos/${ctx.folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.80 + p * 0.20));
           it.result = { src: r1.url, thumb: r2.url, kind: 'image' };
         } else {
+          // 视频：v4.0 去掉 20MB 硬限制（预签名直传无上限）
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
-          if (it.file.size > 20 * 1024 * 1024) throw new Error('视频超过 20MB，中转可能超限，建议压缩后传');
           setStatus(it, 'uploading', '上传视频中…');
           const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
           checkTimeout();
@@ -936,7 +947,7 @@ function openUploader(col) {
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
       el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v4.0')),
-    field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
+    field('上传画质', qSeg, '原图直传：零压缩、保留原始格式与尺寸（v4.0 预签名直传，无大小限制）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
     summary,
