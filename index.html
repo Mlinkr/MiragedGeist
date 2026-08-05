@@ -194,7 +194,8 @@
 
 <!-- v= 为防缓存版本号：每次修改 assets/js 下的文件后，请同步把此数字 +1，
      否则手机/浏览器会一直用旧缓存，看不到更新（表现为「改了但没生效」）。
-     当前值 2 对应 2026-08-05 的 cos.js(XHR) + admin.js(全链路超时) 修复。 -->
-<script type="module" src="assets/js/app.js?v=5"></script>
+     v6 对应 2026-08-05 修复：① cosViewUrl 灯箱大图不再桶侧压缩(原图直出)
+     ② LS_QUALITY 改名丢弃旧 'high' 残留,默认恢复原图直传。 -->
+<script type="module" src="assets/js/app.js?v=6"></script>
 </body>
 </html>

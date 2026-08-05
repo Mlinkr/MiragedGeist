@@ -3,7 +3,7 @@
 import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js?v=5';
 import { store, featuredOf, placeholder } from './store.js?v=5';
 import { PLATFORMS } from './social.js?v=5';
-import * as admin from './admin.js?v=5';
+import * as admin from './admin.js?v=6';
 
 /* ============ 渲染 ============ */
 
@@ -596,10 +596,9 @@ function cloudinaryAttachmentUrl(u){
 const COS_HOST_RE = /\.cos\.[-\w]+\.myqcloud\.com$/;
 function isCosUrl(u){ try { return COS_HOST_RE.test(new URL(u, location.href).hostname); } catch{ return false; } }
 function cosViewUrl(src){
-  /* 灯箱查看用：加数据万象缩放，避免加载 28MB 原图 */
-  if (!isCosUrl(src)) return src;
-  const sep = src.includes('?') ? '|' : '?';
-  return `${src}${sep}imageMogr2/thumbnail/2000x/quality/90`;
+  /* 灯箱查看：必须返回原图字节。用户硬性要求「点开的大图、下载均为原图,不论大小」。
+     缩略图由上传时生成的 -t.jpg(700px) 承担,见 it.thumb;此处绝不追加数据万象缩放/压缩。 */
+  return src;
 }
 
 function paintLightbox() {
@@ -608,8 +607,8 @@ function paintLightbox() {
   const stage = $('#lbStage');
   stage.innerHTML = '';
   const isVideo = it.kind === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(it.src || '');
-  /* 图片：COS 用数据万象缩略版查看(快)，非 COS 用原图 */
-  const viewSrc = isVideo ? it.src : (isCosUrl(it.src) ? cosViewUrl(it.src) : it.src);
+  /* 图片：始终用原图(用户要求大图=原图)。cosViewUrl 现已透传,不再桶侧压缩 */
+  const viewSrc = it.src;
   if (isVideo) {
     stage.append(el('video', { src: it.src, controls: '', autoplay: '', playsinline: '', poster: it.poster || '' }));
   } else {

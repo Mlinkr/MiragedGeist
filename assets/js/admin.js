@@ -8,7 +8,9 @@ import { cosReady, cosRelay, cosRelayPresigned, cosDiagnose } from './cos.js?v=6
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
-const LS_QUALITY = 'mg_img_quality';
+const LS_QUALITY = 'mg_img_quality_v2'; // v5: 改名以丢弃旧版残留的 'high' 值,默认恢复原图直传
+// 迁移清理:清除旧键(曾默认 high 并写入过浏览器),避免继续偷偷压缩上传
+try { localStorage.removeItem('mg_img_quality'); } catch (_) { /* ignore */ }
 
 /* 图片画质档位 */
 export const QUALITY = {
