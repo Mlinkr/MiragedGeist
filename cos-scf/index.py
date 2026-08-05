@@ -1,7 +1,17 @@
 # -*- coding: utf-8 -*-
-"""腾讯云 SCF — COS 专栏文件夹同步（纯标准库，零外部依赖）。
+"""腾讯云 SCF — COS 专栏文件夹同步（纯标准库，零外部依赖）· v5.1
+
 只用 os/json/time/hmac/hashlib/urllib/xml（Python 内置），无需 requirements.txt / InstallDependency。
-前端改名/移动图片时 POST 调用本函数。
+前端上传 / 改名 / 移动 / 删除图片时 POST 调用本函数。
+
+支持的 action：
+  query  : action=upload   —— base64 中转上传（小文件，≤ ~6MB）
+  query  : action=presign  —— 返回预签名 PUT URL（大文件直传桶，无体量限制）
+  body   : rename_folder   —— 整个文件夹改名（COPY + DELETE）
+  body   : move_object     —— 单个对象移动
+  body   : create_folder   —— ★v5.1 新建文件夹（PUT 0 字节占位对象 prefix/）
+  body   : delete_object   —— ★v5.1 删除单个对象（原图 / 缩略图）
+  body   : delete_folder   —— ★v5.1 删除整个文件夹及其下全部对象
 
 部署方式：事件函数 + 函数URL(公网)。详见 README.md
 """

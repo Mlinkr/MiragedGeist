@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>推送 SCF 部署包到 COS 桶根目录</title>
+<style>
+  :root{
+    --bg:#15111f; --card:#1d1830; --line:#2c2542; --text:#ece8f5; --text2:#a89fc4;
+    --accent:#7aa2ff; --ok:#5fd08a; --warn:#f0b35a; --danger:#ff6b81;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+  header h1{font-size:21px;margin:6px 0 4px}
+  header .sub{color:var(--text2);font-size:13px;margin:0 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .card h2{font-size:15px;margin:0 0 10px}
+  .lbl{display:block;font-size:13px;color:var(--text2);margin:10px 0 6px}
+  .lbl:first-child{margin-top:0}
+  input[type=text]{width:100%;background:#120e1c;border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit}
+  .row{display:flex;gap:8px}
+  .row input{flex:1}
+  .btn{border:1px solid var(--line);background:#271f3d;color:var(--text);border-radius:10px;
+    padding:10px 14px;font-size:14px;cursor:pointer;white-space:nowrap}
+  .btn:active{transform:translateY(1px)}
+  .btn.solid{background:var(--accent);color:#0d0a16;border-color:var(--accent);font-weight:600;width:100%}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .state{font-size:13px;margin-top:8px}
+  .state.ok{color:var(--ok)} .state.warn{color:var(--warn)} .state.bad{color:var(--danger)}
+  .steps{list-style:none;margin:0;padding:0;font-size:13px}
+  .steps li{display:flex;gap:9px;padding:7px 0;border-bottom:1px dashed #ffffff10;align-items:flex-start}
+  .steps li:last-child{border-bottom:0}
+  .steps .dot{flex:none;width:19px;height:19px;border-radius:50%;background:#2c2542;color:var(--text2);
+    display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:2px}
+  .steps li.run .dot{background:var(--accent);color:#0d0a16}
+  .steps li.ok  .dot{background:var(--ok);color:#0d0a16}
+  .steps li.bad .dot{background:var(--danger);color:#fff}
+  .steps .txt{flex:1;min-width:0}
+  .steps .msg{color:var(--text2);font-size:12px;word-break:break-all}
+  .steps li.bad .msg{color:var(--danger)}
+  .steps li.ok  .msg{color:var(--ok)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;word-break:break-all}
+  .tip{font-size:12px;color:var(--text2);margin-top:10px;line-height:1.6}
+  .tip code{background:#120e1c;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:11.5px}
+  .kv{display:flex;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px dashed #ffffff10}
+  .kv:last-child{border-bottom:0}
+  .kv b{flex:none;width:82px;color:var(--text2);font-weight:400}
+  .kv span{flex:1;min-width:0;word-break:break-all}
+  #toastWrap{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    display:flex;flex-direction:column;gap:8px;z-index:9999;width:max-content;max-width:90vw}
+  .toast{background:#000a;color:#fff;padding:9px 14px;border-radius:10px;font-size:13px;border:1px solid #ffffff22}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>推送 SCF 部署包 → COS 桶根目录</h1>
+    <p class="sub">把最新的云函数代码（含 create_folder / delete_object / delete_folder）打包上传到你桶的根目录。</p>
+  </header>
+
+  <div class="card">
+    <h2>1 · COS 中转地址</h2>
+    <label class="lbl">云函数 URL（与管理面板共用，读自本机浏览器）</label>
+    <div class="row">
+      <input type="text" id="relay" placeholder="https://xxxx.ap-guangzhou.tencentscf.com/">
+      <button class="btn" id="saveRelay">保存</button>
+    </div>
+    <div class="state" id="relayState"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · 部署包</h2>
+    <div class="kv"><b>来源</b><span id="srcName">仓库内 cos-scf/cos-scf-deploy.zip</span></div>
+    <div class="kv"><b>目标键</b><span class="mono" id="dstKey">cos-scf-deploy.zip（桶根目录）</span></div>
+    <div class="kv"><b>大小</b><span id="zipSize">—</span></div>
+    <div class="kv"><b>本地 SHA256</b><span class="mono" id="zipHash">—</span></div>
+    <label class="lbl">如需改上传别的 zip，可手动选择文件（可选）</label>
+    <input type="file" id="pick" accept=".zip,application/zip" style="font-size:13px;color:var(--text2)">
+  </div>
+
+  <div class="card">
+    <h2>3 · 执行</h2>
+    <button class="btn solid" id="go">开始推送到桶根目录</button>
+    <ul class="steps" id="steps" style="margin-top:12px">
+      <li data-k="fetch"><i class="dot">1</i><div class="txt"><div>读取部署包</div><div class="msg">等待开始</div></div></li>
+      <li data-k="hash"><i class="dot">2</i><div class="txt"><div>计算本地 SHA256</div><div class="msg">等待开始</div></div></li>
+      <li data-k="up"><i class="dot">3</i><div class="txt"><div>经云函数上传到桶根目录</div><div class="msg">等待开始</div></div></li>
+      <li data-k="vfy"><i class="dot">4</i><div class="txt"><div>回读桶内文件校验字节一致</div><div class="msg">等待开始</div></div></li>
+    </ul>
+    <div class="row" style="margin-top:12px;display:none" id="resRow">
+      <input type="text" id="resUrl" readonly>
+      <button class="btn" id="copyUrl">复制</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tip">
+      <b>上传成功后怎么用：</b><br>
+      1. 打开腾讯云控制台 → 云函数 → 你的函数 → <code>函数代码</code>；<br>
+      2. 提交方法选「<code>通过 COS 上传 zip 包</code>」，Bucket 选 <code>miragedgeist-1463128155</code>，
+         对象键填 <code>cos-scf-deploy.zip</code>；<br>
+      3. 点「部署」→ 等待发布完成即可。<br><br>
+      <b>本次代码新增：</b><code>create_folder</code>（新建专栏时在桶内建同名文件夹）、
+      <code>delete_object</code>（删图时同步删原图+缩略图）、
+      <code>delete_folder</code>（删专栏时清空并删除同名文件夹）。
+    </div>
+  </div>
+</div>
+<div id="toastWrap"></div>
+
+<script>
+const LS_RELAY = 'mg_cos_sync_url';
+const ZIP_PATH  = 'cos-scf/cos-scf-deploy.zip';
+const ROOT_KEY  = 'cos-scf-deploy.zip';
+
+const $ = s => document.querySelector(s);
+const relayIn = $('#relay'), relaySt = $('#relayState');
+
+function toast(m, t){
+  const d = document.createElement('div');
+  d.className = 'toast'; d.textContent = m;
+  $('#toastWrap').appendChild(d);
+  setTimeout(() => d.remove(), t || 2600);
+}
+function step(k, cls, msg){
+  const li = document.querySelector(`.steps li[data-k="${k}"]`);
+  if (!li) return;
+  li.className = cls || '';
+  if (msg != null) li.querySelector('.msg').textContent = msg;
+}
+function normUrl(u){
+  u = (u || '').trim();
+  if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+  return u;
+}
+function paintRelay(){
+  const v = (localStorage.getItem(LS_RELAY) || '').trim();
+  relayIn.value = v;
+  if (v) { relaySt.className = 'state ok'; relaySt.textContent = '已读到本机保存的中转地址 ✅'; }
+  else   { relaySt.className = 'state warn'; relaySt.textContent = '本机未配置中转地址 —— 请粘贴云函数 URL 后点保存（无痕窗口会丢失，用普通窗口更好）'; }
+}
+paintRelay();
+
+$('#saveRelay').onclick = () => {
+  const v = normUrl(relayIn.value);
+  if (!v) { toast('请先填写云函数 URL'); return; }
+  localStorage.setItem(LS_RELAY, v);
+  paintRelay();
+  toast('已保存到本机');
+};
+
+/* ---------- SHA256 ---------- */
+async function sha256Hex(buf){
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function blobToBase64(blob){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => { const d = r.result || ''; const i = d.indexOf(','); res(i >= 0 ? d.slice(i + 1) : d); };
+    r.onerror = () => rej(r.error || new Error('读取失败'));
+    r.readAsDataURL(blob);
+  });
+}
+/* ---------- base64 中转上传（zip 仅几 KB，无需预签名） ---------- */
+function cosRelay(key, blob, ct){
+  const base = normUrl(localStorage.getItem(LS_RELAY) || '');
+  if (!base) return Promise.reject(new Error('COS 中转地址未配置'));
+  const sep = base.includes('?') ? '&' : '?';
+  const url = `${base}${sep}action=upload&key=${encodeURIComponent(key)}&ct=${encodeURIComponent(ct)}`;
+  return blobToBase64(blob).then(b64 => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.timeout = 120000;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { const j = JSON.parse(xhr.responseText); j.ok ? resolve(j) : reject(new Error(j.err || '云函数业务失败')); }
+        catch (_) { reject(new Error('响应非 JSON：' + xhr.responseText.slice(0, 160))); }
+      } else {
+        let d = ''; try { d = (JSON.parse(xhr.responseText || '{}').err) || ''; } catch (_) { d = xhr.responseText.slice(0, 120); }
+        reject(new Error(`HTTP ${xhr.status}${d ? ': ' + d : ''}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('网络错误或跨域拦截'));
+    xhr.ontimeout = () => { xhr.abort(); reject(new Error('上传超时（120s）')); };
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'text/plain');
+    xhr.send(b64);
+  }));
+}
+
+/* ---------- 手选文件 ---------- */
+let pickedFile = null;
+$('#pick').onchange = e => {
+  pickedFile = e.target.files[0] || null;
+  $('#srcName').textContent = pickedFile ? ('本地文件：' + pickedFile.name) : '仓库内 cos-scf/cos-scf-deploy.zip';
+  $('#zipSize').textContent = pickedFile ? (pickedFile.size + ' 字节') : '—';
+  $('#zipHash').textContent = '—';
+};
+
+/* ---------- 主流程 ---------- */
+$('#go').onclick = async () => {
+  const btn = $('#go');
+  btn.disabled = true;
+  $('#resRow').style.display = 'none';
+  ['fetch','hash','up','vfy'].forEach(k => step(k, '', '等待开始'));
+
+  try {
+    if (!(localStorage.getItem(LS_RELAY) || '').trim()) throw new Error('请先在上方填写并保存云函数 URL');
+
+    // 1 读取 zip
+    step('fetch', 'run', '读取中…');
+    let blob;
+    if (pickedFile) {
+      blob = pickedFile;
+    } else {
+      const r = await fetch(ZIP_PATH + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error(`拉取 ${ZIP_PATH} 失败（HTTP ${r.status}），可先手动选择本地 zip`);
+      blob = await r.blob();
+    }
+    const buf = await blob.arrayBuffer();
+    $('#zipSize').textContent = buf.byteLength + ' 字节';
+    step('fetch', 'ok', `已读取 ${buf.byteLength} 字节`);
+
+    // 2 本地哈希
+    step('hash', 'run', '计算中…');
+    const localHash = await sha256Hex(buf);
+    $('#zipHash').textContent = localHash;
+    step('hash', 'ok', localHash);
+
+    // 3 上传
+    step('up', 'run', `上传到桶根目录 ${ROOT_KEY} …`);
+    const res = await cosRelay(ROOT_KEY, blob, 'application/zip');
+    step('up', 'ok', res.url || res.key || '已上传');
+    if (res.url) {
+      $('#resUrl').value = res.url;
+      $('#resRow').style.display = '';
+    }
+
+    // 4 回读校验
+    step('vfy', 'run', '回读桶内文件…');
+    try {
+      const rr = await fetch(res.url + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!rr.ok) throw new Error('HTTP ' + rr.status);
+      const rbuf = await rr.arrayBuffer();
+      const remoteHash = await sha256Hex(rbuf);
+      if (remoteHash === localHash) {
+        step('vfy', 'ok', `字节一致 ✅ ${remoteHash.slice(0, 16)}…（${rbuf.byteLength} 字节）`);
+        toast('推送完成，字节校验通过 ✅', 3200);
+      } else {
+        step('vfy', 'bad', `哈希不一致！本地 ${localHash.slice(0,16)}… / 桶内 ${remoteHash.slice(0,16)}…`);
+        toast('上传成功但哈希不一致，请重试', 3600);
+      }
+    } catch (e) {
+      // 桶可能是私有读或未开 CORS，此时无法回读，不算失败
+      step('vfy', '', `跳过校验（桶不可匿名读或未开 CORS）：${e.message}`);
+      toast('已上传，回读校验被桶权限挡住（不影响部署）', 3400);
+    }
+  } catch (e) {
+    const running = document.querySelector('.steps li.run');
+    if (running) { running.className = 'bad'; running.querySelector('.msg').textContent = e.message; }
+    toast('失败：' + e.message, 4000);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+$('#copyUrl').onclick = () => {
+  const v = $('#resUrl').value;
+  if (!v) return;
+  navigator.clipboard?.writeText(v).then(() => toast('已复制'), () => toast('复制失败，请手动选中'));
+};
+</script>
+</body>
+</html>
