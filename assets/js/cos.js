@@ -52,10 +52,16 @@ export function cosRelay(key, blob, contentType, onProgress) {
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) throw new Error('COS 中转地址未配置');
 
+  // 自动补全 https:// 前缀（用户可能只填了域名）
+  let urlBase = base.trim();
+  if (urlBase && !urlBase.startsWith('http://') && !urlBase.startsWith('https://')) {
+    urlBase = 'https://' + urlBase;
+  }
+
   // 真实 MIME 通过 query 参数 ct 传给云函数；请求头固定用 text/plain
   // （「简单请求」Content-Type，避免触发 CORS 预检 OPTIONS）
-  const sep = base.includes('?') ? '&' : '?';
-  const url = `${base}${sep}action=upload&key=${encodeURIComponent(key)}`
+  const sep = urlBase.includes('?') ? '&' : '?';
+  const url = `${urlBase}${sep}action=upload&key=${encodeURIComponent(key)}`
            + `&ct=${encodeURIComponent(contentType || 'application/octet-stream')}`;
 
   return new Promise((resolve, reject) => {
@@ -120,8 +126,10 @@ export function cosRelay(key, blob, contentType, onProgress) {
  * 返回每步的结果描述数组，可在控制台查看或展示给用户。
  */
 export async function cosDiagnose() {
-  const base = (localStorage.getItem(LS_RELAY) || '').trim();
+  let base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) return [{ step: '配置', ok: false, msg: '未配置中转地址' }];
+  // 自动补全 https://
+  if (!base.startsWith('http://') && !base.startsWith('https://')) base = 'https://' + base;
   const results = [];
 
   // Step 1: Image 加载测试（最轻量，测基本跨域可达性）

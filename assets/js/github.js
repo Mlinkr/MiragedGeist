@@ -3,6 +3,23 @@
 const LS_KEY = 'mg_gh_cfg';
 const API = 'https://api.github.com';
 
+/** 默认 API 超时（普通查询/读写 JSON） */
+const API_TIMEOUT_MS = 30_000;
+/** 上传二进制文件超时（base64 编码 + PUT 大文件需要更久） */
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * 给 fetch 加超时的包装
+ * @param {string} url
+ * @param {RequestInit} opts
+ * @param {number} ms 超时毫秒数
+ */
+function fetchWithTimeout(url, opts = {}, ms = API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export const gh = {
   cfg: loadCfg(),
 
@@ -17,17 +34,23 @@ export const gh = {
     this.cfg = loadCfg();
   },
 
-  async api(path, opts = {}) {
-    const res = await fetch(API + path, {
-      ...opts,
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(this.cfg.token ? { Authorization: `Bearer ${this.cfg.token}` } : {}),
-        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-        ...opts.headers,
-      },
-    });
+  async api(path, opts = {}, timeoutMs = API_TIMEOUT_MS) {
+    let res;
+    try {
+      res = await fetchWithTimeout(API + path, {
+        ...opts,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(this.cfg.token ? { Authorization: `Bearer ${this.cfg.token}` } : {}),
+          ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+          ...opts.headers,
+        },
+      }, timeoutMs);
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error(`GitHub API 超时（${Math.round(timeoutMs / 1000)}s），网络可能较慢，请重试`);
+      throw new Error('网络错误：无法连接 GitHub API（' + (e.message || '未知错误') + '）');
+    }
     if (res.status === 404) return null;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.message || `GitHub ${res.status}`);
@@ -71,10 +94,23 @@ export const gh = {
     });
   },
 
-  /** 写入二进制（File / Blob / ArrayBuffer） */
+  /**
+   * 写入二进制（File / Blob / ArrayBuffer）
+   *
+   * 流程：base64 编码 → GET 查 SHA → PUT 上传
+   * 每步都有超时保护，大文件上传不再无限挂起。
+   */
   async putBinary(path, data, message) {
-    const b64 = await toBase64(data);
+    // 阶段 1：base64 编码（手机处理大文件可能慢）
+    const b64 = await Promise.race([
+      toBase64(data),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('文件编码超时（30s）：文件过大或手机性能不足')), 30_000)
+      ),
+    ]);
+    // 阶段 2：查询现有文件 SHA
     const cur = await this.api(this.contentsUrl(path)).catch(() => null);
+    // 阶段 3：PUT 上传（大 payload 给更长超时）
     await this.api(`/repos/${this.cfg.owner}/${this.cfg.repo}/contents/${encodeURI(path)}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -83,7 +119,7 @@ export const gh = {
         sha: cur?.sha,
         branch: this.cfg.branch || undefined,
       }),
-    });
+    }, UPLOAD_TIMEOUT_MS);
     return path;
   },
 

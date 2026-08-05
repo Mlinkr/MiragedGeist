@@ -1,10 +1,10 @@
 /* 管理模式：连接仓库 · 编辑内容 · 上传媒体 · 一键发布 */
 /* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
-import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=3';
-import { gh } from './github.js?v=3';
-import { store, DEFAULT_DATA } from './store.js?v=3';
-import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=3';
-import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=3';
+import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=4';
+import { gh } from './github.js?v=4';
+import { store, DEFAULT_DATA } from './store.js?v=4';
+import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=4';
+import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=4';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -784,25 +784,44 @@ function openUploader(col) {
         if (it.kind === 'image') {
           let src, ext = 'jpg';
           if (mode.maxSide === 0) {
+            // 原图直传
+            setStatus(it, 'uploading', '上传到 GitHub…');
             if (gh.ready && it.file.size > 45 * 1024 * 1024) {
-              src = await storeMedia(await compressImage(it.file, 3000, .94), base, 'jpg'); ext = 'jpg';
+              src = await withTimeout(storeMedia(await compressImage(it.file, 3000, .94), base, 'jpg'), 120_000, 'GitHub 上传(大图)');
+              ext = 'jpg';
             } else {
               ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-              src = await storeMedia(it.file, base, ext);
+              src = await withTimeout(storeMedia(it.file, base, ext), 90_000, 'GitHub 上传原图');
             }
           } else {
-            src = await storeMedia(await compressImage(it.file, mode.maxSide, mode.q), base, 'jpg');
+            // 需要压缩
+            setStatus(it, 'uploading', '压缩中…');
+            const compressed = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+            checkTimeout();
+            setStatus(it, 'uploading', '上传到 GitHub… (1/2)');
+            src = await withTimeout(storeMedia(compressed, base, 'jpg'), 90_000, 'GitHub 上传');
           }
-          setProgress(it, 0.85);
-          const thumb = await storeMedia(await compressImage(it.file, 700, .8), base + '-t', 'jpg');
+          checkTimeout();
+          setProgress(it, 0.80);
+          setStatus(it, 'uploading', '上传缩略图到 GitHub…');
+          const thumb = await withTimeout(
+            storeMedia(await withTimeout(compressImage(it.file, 700, .8), 30_000, '缩略图压缩'), base + '-t', 'jpg'),
+            60_000, 'GitHub 上传缩略图'
+          );
           it.result = { src, thumb, kind: 'image' };
         } else {
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase();
           if (it.file.size > 45 * 1024 * 1024) throw new Error('视频超过 45MB，建议压缩后再传');
-          const src = await storeMedia(it.file, base, ext);
+          setStatus(it, 'uploading', '上传视频到 GitHub…');
+          const src = await withTimeout(storeMedia(it.file, base, ext), 120_000, 'GitHub 上传视频');
+          checkTimeout();
           setProgress(it, 0.85);
-          const poster = await videoPoster(it.file).catch(() => null);
-          const posterPath = poster ? await storeMedia(poster, `${base}-p`, 'jpg') : '';
+          const poster = await withTimeout(videoPoster(it.file), 15_000, '视频截帧').catch(() => null);
+          let posterPath = '';
+          if (poster) {
+            checkTimeout();
+            posterPath = await withTimeout(storeMedia(poster, `${base}-p`, 'jpg'), 60_000, 'GitHub 上传封面');
+          }
           it.result = { src, poster: posterPath, thumb: posterPath, kind: 'video' };
         }
       } else {
@@ -825,7 +844,7 @@ function openUploader(col) {
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v2.1')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v2.2')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
