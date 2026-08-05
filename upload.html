@@ -43,6 +43,10 @@
   .item .name{font-size:13px;word-break:break-all}
   .item .size{font-size:12px;color:var(--text2)}
   .item .prog{font-size:12px;color:var(--accent);margin-top:2px}
+  .item .integ{font-size:12px;margin-top:2px;word-break:break-all}
+  .item .integ.ok{color:var(--ok)}
+  .item .integ.warn{color:var(--warn)}
+  .item .integ.bad{color:var(--danger);font-weight:600}
   .item .links{display:flex;flex-direction:column;gap:6px;margin-top:6px}
   .item .link{font-size:12px;padding:7px 9px}
   .item .ops{display:flex;flex-direction:column;gap:6px;flex:none}
@@ -62,7 +66,7 @@
 <main class="wrap">
   <header>
     <h1>原图批量上传</h1>
-    <p class="sub">批量上传到 COS，自动生成「原图外链」+「缩略图外链」。复制后粘到专栏管理面板的「🌐 粘贴外链图片」即可（每行格式：<code>原图 | 标题 | 缩略图</code>）。原图为字节级直传，不做任何压缩。</p>
+    <p class="sub">批量上传到 COS，自动生成「原图外链」+「缩略图外链」。复制后粘到专栏管理面板的「🌐 粘贴外链图片」即可（每行格式：<code>原图 | 标题 | 缩略图</code>）。原图为字节级直传、不做任何压缩；<b>每张上传后会自动把桶内文件读回，与本地原文件比对 SHA256</b>，显示「✅ 字节一致」才算真正原图。</p>
   </header>
 
   <section class="card">
@@ -162,6 +166,26 @@ function compressImage(file, maxSide = 700, quality = .8) {
 const cleanName = n => (n || '').replace(/\.[^.]+$/, '');
 const fmtSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 
+/* ---------- 字节级自检：上传后把桶内文件读回，与本地原文件比对 SHA256 ---------- */
+async function sha256Hex(input) {
+  const buf = input instanceof ArrayBuffer ? input : await input.arrayBuffer();
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function verifyIntegrity(it, remoteUrl) {
+  try {
+    const [local, remote] = await Promise.all([
+      sha256Hex(it.file),
+      sha256Hex(await (await fetch(remoteUrl, { cache: 'no-store' })).blob()),
+    ]);
+    return local === remote
+      ? { ok: true, hash: local }
+      : { ok: false, local, remote };
+  } catch (e) {
+    return { ok: null, err: e.message };
+  }
+}
+
 /* ---------- 选择 / 拖拽 ---------- */
 let items = [];
 const fileIn = $('#file');
@@ -189,6 +213,7 @@ function renderItem(it) {
       el('div', { class: 'name' }, it.file.name),
       el('div', { class: 'size' }, fmtSize(it.file.size)),
       el('div', { class: 'prog' }, '待上传'),
+      el('div', { class: 'integ' }, ''),
       el('div', { class: 'links' },
         el('input', { class: 'link', readonly: '', placeholder: '原图外链生成后显示' }),
         el('input', { class: 'link', readonly: '', placeholder: '缩略图外链生成后显示' }),
@@ -201,6 +226,7 @@ function renderItem(it) {
   );
   it._node = node;
   it._prog = node.querySelector('.prog');
+  it._integ = node.querySelector('.integ');
   it._orig = node.querySelectorAll('.link')[0];
   it._thumb = node.querySelectorAll('.link')[1];
   $('#list').append(node);
@@ -222,6 +248,20 @@ async function uploadItem(it) {
   it._prog.textContent = '上传原图中…';
   // 原图：原始文件字节级直传，零压缩
   const r1 = await cosRelay(`Photos/${folder}/${name}.${ext}`, it.file, ctype, p => setProgress(it, p * 0.6));
+
+  // 字节级自检：把桶内文件读回，与本地原文件比对 SHA256
+  it._prog.textContent = '校验原图字节…';
+  const v = await verifyIntegrity(it, r1.url);
+  if (v.ok === true) {
+    it._integ.textContent = '✅ 字节一致（SHA256 匹配，原图零压缩）';
+    it._integ.className = 'integ ok';
+  } else if (v.ok === null) {
+    it._integ.textContent = '⚠️ 无法校验（' + (v.err || '网络/跨域') + '），但上传已成功';
+    it._integ.className = 'integ warn';
+  } else {
+    it._integ.textContent = '❌ 字节不一致！本地 ' + (v.local || '').slice(0, 10) + ' / 远端 ' + (v.remote || '').slice(0, 10);
+    it._integ.className = 'integ bad';
+  }
 
   it._prog.textContent = '上传缩略图中…';
   let thumbUrl;
