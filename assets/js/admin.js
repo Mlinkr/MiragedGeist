@@ -1,10 +1,10 @@
 /* 管理模式：连接仓库 · 编辑内容 · 上传媒体 · 一键发布 */
 /* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
-import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=2';
-import { gh } from './github.js?v=2';
-import { store, DEFAULT_DATA } from './store.js?v=2';
-import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=2';
-import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=2';
+import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=3';
+import { gh } from './github.js?v=3';
+import { store, DEFAULT_DATA } from './store.js?v=3';
+import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=3';
+import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=3';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -823,7 +823,9 @@ function openUploader(col) {
   }
 
   const box = el('div', {},
-    el('div', { class: 'tip' }, `目标存储：${targetText}`),
+    el('div', { class: 'tip' }, `目标存储：${targetText}`,
+      // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v2.1')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
