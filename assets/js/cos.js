@@ -43,12 +43,10 @@ export function cosReady() {
  *   - XHR.timeout + xhr.abort() 可靠地实现超时取消
  *   - 手机浏览器对 XHR POST 的兼容性久经考验
  *
- * ★ v3 关键修复：send() 前将 blob 重新包装为 type='text/plain'。
- *   部分手机浏览器在 xhr.send(File) 时会忽略 setRequestHeader 设的
- *   Content-Type，改用文件自身的 MIME（如 image/jpeg），而 image/jpeg
- *   不属于 CORS「简单请求」的三种允许值之一 → 触发 OPTIONS 预检 →
- *   在弱网/运营商劫持场景下预检失败 → 报「跨域被拦截」。
- *   用 new Blob([blob], {type:'text/plain'}) 强制类型可彻底规避此问题。
+ * ★ v3 关键修复：send() 前把 Blob 转成 base64 字符串再发送（Content-Type 用 text/plain）。
+ *   腾讯云函数 URL 收到 text/plain 二进制 body 时会按 UTF-8 转成字符串、
+ *   原始字节将永久丢失、无法还原；改为 base64 字符串后云函数在服务端解回字节，
+ *   图片才能完整上传到 COS 桶。text/plain 属于 CORS「简单请求」，不触发 OPTIONS 预检，手机端最稳。
  *
  * @param {string} key        对象键，如 Photos/folder/name.jpg
  * @param {Blob}   blob        内容（原始图 / 缩略图 / 视频 / 封面帧）
@@ -127,12 +125,26 @@ export function cosRelay(key, blob, contentType, onProgress) {
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'text/plain');
-    // ★ v3 核心：强制包装为 text/plain 类型的 Blob，
-    //   防止手机浏览器用文件原始 MIME 覆盖请求头导致触发 CORS 预检
-    const safeBlob = blob instanceof Blob
-      ? new Blob([blob], { type: 'text/plain' })
-      : blob;
-    xhr.send(safeBlob);
+    // ★ v3 核心：把 Blob 转成 base64 字符串发送。
+    //   腾讯云函数 URL 会把 text/plain 的二进制 body 按 UTF-8 转字符串、丢字节；
+    //   改发 base64 字符串，云函数再 base64 解回原始字节，图片完整进桶。
+    //   text/plain 是「简单请求」，不触发 CORS 预检，手机端最稳。
+    blobToBase64(blob).then(b64 => xhr.send(b64))
+      .catch(e => reject(new Error('文件转 base64 失败：' + (e.message || e))));
+  });
+}
+
+/** Blob/File → base64 字符串（去掉 data: 前缀） */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const d = r.result || '';
+      const i = d.indexOf(',');
+      resolve(i >= 0 ? d.slice(i + 1) : d);
+    };
+    r.onerror = () => reject(r.error || new Error('读取文件失败'));
+    r.readAsDataURL(blob);
   });
 }
 

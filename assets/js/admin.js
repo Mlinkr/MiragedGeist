@@ -934,7 +934,7 @@ function openUploader(col) {
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.1')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.2')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,

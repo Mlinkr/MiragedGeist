@@ -81,9 +81,40 @@ def _api(method, path, params=None, data=None, headers=None, parse=False, timeou
         return ET.fromstring(txt)
     return txt
 
+def _body_bytes(raw, is_b64_event):
+    """把 SCF 收到的请求体还原成原始字节。
+
+    腾讯云函数 URL 对 text/plain 二进制 body 会先按 UTF-8 转成 Python str，
+    原始字节已不可恢复，因此前端统一改为『base64 字符串』上传，这里再解回字节。
+    兼容三种来源：
+      1) SCF 自带 base64（isBase64Encoded=True）
+      2) 前端显式发的 base64 字符串（合法 base64 即解码）
+      3) 纯 ASCII 文本（诊断用，latin1 兜底）
+    """
+    if isinstance(raw, bytes):
+        return raw
+    if isinstance(raw, str):
+        s = raw.strip()
+        if is_b64_event:
+            try:
+                return base64.b64decode(s)
+            except Exception:
+                pass
+        # 前端上传统一走 base64：看到合法 base64 就解
+        if s and len(s) % 4 == 0 and re.fullmatch(r'[A-Za-z0-9+/=]+', s):
+            try:
+                return base64.b64decode(s)
+            except Exception:
+                pass
+        try:
+            return s.encode('latin1')          # 全 ASCII：原样字节
+        except Exception:
+            return s.encode('utf-8', 'surrogateescape')  # 兜底
+    return b''
+
 def do_upload(event, q):
-    """中转上传：浏览器把文件 POST 过来（二进制 body + query 里的 key/ct），
-    由本函数在服务端用 COS 密钥签名后直传桶。密钥不离开服务器。"""
+    """中转上传：浏览器把文件以 base64 字符串 POST 过来（body + query 里的 key/ct），
+    由本函数在服务端解码并用 COS 密钥签名后直传桶。密钥不离开服务器。"""
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
     key = (q.get('key') or '').strip()
@@ -91,15 +122,7 @@ def do_upload(event, q):
         return {'statusCode': 400, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 key'}, ensure_ascii=False), 'isBase64Encoded': False}
     ct = q.get('ct') or 'application/octet-stream'
     raw = event.get('body', '')
-    if event.get('isBase64Encoded'):
-        try:
-            data = base64.b64decode(raw)
-        except Exception:
-            data = raw.encode('latin1') if isinstance(raw, str) else (raw or b'')
-    elif isinstance(raw, bytes):
-        data = raw
-    else:
-        data = raw.encode('latin1') if isinstance(raw, str) else (raw or b'')
+    data = _body_bytes(raw, event.get('isBase64Encoded'))
     if not data:
         return {'statusCode': 400, 'headers': H, 'body': json.dumps({'ok': False, 'err': '空文件'}, ensure_ascii=False), 'isBase64Encoded': False}
     try:
@@ -140,7 +163,13 @@ def main_handler(event, context):
     # 中转上传：二进制 body + query action=upload（在解析 JSON 之前分流）
     q = event.get('queryString') or event.get('queryStringParameters') or {}
     if str(q.get('action', '')).lower() == 'upload':
-        return do_upload(event, q)
+        try:
+            return do_upload(event, q)
+        except Exception as e:
+            # 任何未捕获异常都返回 200+CORS，避免浏览器因缺 CORS 头而误报「跨域」
+            return {'statusCode': 200, 'headers': H,
+                    'body': json.dumps({'ok': False, 'err': 'SCF 内部错误：' + str(e)}, ensure_ascii=False),
+                    'isBase64Encoded': False}
     if not SID or not SKEY:
         return {'statusCode': 500, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'COS 凭证未配置'}, ensure_ascii=False), 'isBase64Encoded': False}
     try:
