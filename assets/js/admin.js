@@ -16,7 +16,7 @@ export const QUALITY = {
   high:   { label: '高画质（推荐）', desc: '长边 3000px、质量 94%，肉眼几乎无损，体积约为原图 1/4', maxSide: 3000, q: .94 },
   normal: { label: '标准', desc: '长边 2000px、质量 88%，加载最快，适合大量作品', maxSide: 2000, q: .88 },
 };
-export const getQuality = () => localStorage.getItem(LS_QUALITY) || 'high';
+export const getQuality = () => localStorage.getItem(LS_QUALITY) || 'origin';
 export const setQuality = v => localStorage.setItem(LS_QUALITY, v);
 
 const rerender = () => window.dispatchEvent(new Event('mg:render'));
@@ -615,7 +615,7 @@ function openUploader(col) {
   Object.entries(QUALITY).forEach(([k, v]) => {
     qSeg.append(el('button', {
       class: k === quality ? 'on' : '',
-      onclick: e => { quality = k; [...qSeg.children].forEach(c => c.classList.remove('on')); e.target.classList.add('on'); },
+      onclick: e => { quality = k; setQuality(k); [...qSeg.children].forEach(c => c.classList.remove('on')); e.target.classList.add('on'); },
     }, v.label));
   });
 
@@ -792,18 +792,18 @@ function openUploader(col) {
         try {
           if (it.kind === 'image') {
           // ---- 阶段 1：确定上传内容 ----
-          // ★ v4.0: 「原图直传」= 零压缩、零修改、保留原始格式，直接走预签名直传（无大小限制）
-          //   高画质/标准模式才做客户端压缩（缩略图始终压缩到 700px）
           const isOriginal = (mode.maxSide === 0);
+          console.log('[upload] 画质模式:', quality, '| maxSide:', mode.maxSide, '| isOriginal:', isOriginal,
+            '| 文件原始大小:', (it.file.size / 1048576).toFixed(2), 'MB');
           setStatus(it, 'uploading', isOriginal ? '准备原图…' : '压缩中…');
           let blob, ctype, ext;
           if (isOriginal) {
             blob = it.file;                                    // 原始文件，零修改
             ctype = it.file.type || 'image/jpeg';
-            // 保留原始扩展名（支持 jpg/png/heic/webp 等）
             ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-            console.log('[upload] 原图直传模式：文件=%s 浏览器提供大小=%.1fMB 类型=%s 扩展名=%s（零压缩，直接上传）',
-              it.file.name, it.file.size / 1048576, ctype, ext);
+            // ★ 硬校验：原图模式下 blob 必须就是原始 File 对象
+            if (blob !== it.file) console.error('[upload] ⚠️ 原图模式下 blob !== file！');
+            console.log('[upload] ✅ 原图直传：零压缩 | 传输大小=', (blob.size/1048576).toFixed(2), 'MB | 类型=', ctype, ' | 扩展名=', ext);
           } else {
             blob = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
             checkTimeout();

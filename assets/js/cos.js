@@ -52,6 +52,7 @@ export function cosReady() {
  * @returns {Promise<{ok:boolean,key:string,url:string}>}
  */
 export function cosRelayPresigned(key, blob, contentType, onProgress) {
+  console.log('[cos] 🚀 预签名直传启动 | key=', key, '| blob.size=', (blob.size/1048576).toFixed(2), 'MB | contentType=', contentType);
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) return Promise.reject(new Error('COS 中转地址未配置'));
   let urlBase = base.trim();
