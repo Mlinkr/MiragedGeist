@@ -802,6 +802,8 @@ function openUploader(col) {
             ctype = it.file.type || 'image/jpeg';
             // 保留原始扩展名（支持 jpg/png/heic/webp 等）
             ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+            console.log('[upload] 原图直传模式：文件=%s 浏览器提供大小=%.1fMB 类型=%s 扩展名=%s（零压缩，直接上传）',
+              it.file.name, it.file.size / 1048576, ctype, ext);
           } else {
             blob = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
             checkTimeout();
@@ -810,7 +812,7 @@ function openUploader(col) {
           }
           // v4.0: 不再有 8MB 硬限制（预签名直传无体量上限）
           // ---- 阶段 2：上传原图到 COS ----
-          setStatus(it, 'uploading', '上传中… (1/2)');
+          setStatus(it, 'uploading', `上传中… (${(blob.size/1048576).toFixed(1)}MB) (1/2)`);
           const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.${ext}`, blob, ctype, p => setProgress(it, p * 0.80));
           checkTimeout();
           // ---- 阶段 3：生成并上传缩略图（始终压缩到 700px）----
