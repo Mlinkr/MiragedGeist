@@ -526,7 +526,7 @@ export function openFilmForm(existing) {
 
   const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '' });
   if (!f.image) imgEl.style.display = 'none';
-  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl, titleIn) },
+  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl) },
     el('div', {}, f.image ? '点击更换影视图片' : '点击上传影视图片'),
     el('div', { class: 'hint' }, '海报 / 剧照，建议竖图')
   );
@@ -576,31 +576,17 @@ export function openFilmForm(existing) {
   openDrawer(existing ? '编辑影视' : '添加影视', box);
 }
 
-/** 影视图片：COS 优先直传到 Cut/ 文件夹，未配置则退化为 GitHub / dataURL */
-async function pickFilmImage(f, imgEl, titleIn) {
+/** 影视图片：连接仓库就上传，否则退化为本地 dataURL（沿用改动前的写法） */
+async function pickFilmImage(f, imgEl) {
   const [file] = await pickFiles({ accept: 'image/*' });
   if (!file) return;
   busy(true, '上传影视图片…');
   try {
-    // ★ COS 直传：原图字节级写入桶的 Cut/ 文件夹
-    if (cosReady()) {
-      const ctype = file.type || 'image/jpeg';
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-      // 用输入框当前值做子目录名（用户可能还没点保存，f.title 还是空的）
-      const folder = (titleIn && titleIn.value.trim()) || f.title || 'films';
-      const safeFolder = folder.replace(/[^\w一-龥\-]/g, '-') || 'films';
-      const r = await cosRelay(`Cut/${safeFolder}/${f.id}.${ext}`, file, ctype);
-      f.image = r.url;
-      imgEl.src = r.url; imgEl.style.display = '';
-      toast('图片已上传至 COS（Cut 文件夹），保存后生效', 'ok');
-    } else {
-      // 兜底：GitHub 或本地 dataURL
-      const blob = await compressImage(file, 1400, .92);
-      const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
-      f.image = path;
-      imgEl.src = path; imgEl.style.display = '';
-      toast('图片已选好，保存后生效', 'ok');
-    }
+    const blob = await compressImage(file, 1400, .92);
+    const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
+    f.image = path;
+    imgEl.src = path; imgEl.style.display = '';
+    toast('图片已选好，保存后生效', 'ok');
   } catch (e) {
     toast('上传失败：' + e.message, 'err');
   } finally {
