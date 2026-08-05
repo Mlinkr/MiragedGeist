@@ -1011,22 +1011,6 @@
           "kind": "image",
           "title": "IMG 0893",
           "star": false
-        },
-        {
-          "id": "msg2muydk8a5m",
-          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msg2ljqk6y3ul.jpg",
-          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msg2ljqk6y3ul-t.jpg",
-          "kind": "image",
-          "title": "IMG_4259",
-          "star": false
-        },
-        {
-          "id": "msg2muydgq0lg",
-          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msg2ljql4c0cv.jpg",
-          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E8%B5%B5%E4%BB%8A%E9%BA%A6/msg2ljql4c0cv-t.jpg",
-          "kind": "image",
-          "title": "IMG_4260",
-          "star": false
         }
       ]
     },
@@ -1476,5 +1460,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-05T13:43:42.301Z"
+  "updatedAt": "2026-08-05T13:45:07.680Z"
 }
