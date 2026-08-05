@@ -36,33 +36,81 @@ export function cosReady() {
 export function cosRelay(key, blob, contentType, onProgress) {
   const base = (localStorage.getItem(LS_RELAY) || '').trim();
   if (!base) throw new Error('COS 中转地址未配置');
-  // 真实 MIME 通过 query 参数 ct 传给云函数；XHR 头固定用 text/plain
-  // （「简单请求」Content-Type，避免触发 CORS 预检 OPTIONS。
-  //   部分手机浏览器/WebView 对非标准域名的预检会静默失败导致 onerror）
+  // 真实 MIME 通过 query 参数 ct 传给云函数；请求头固定用 text/plain
+  // （「简单请求」Content-Type，避免触发 CORS 预检 OPTIONS）
   const sep = base.includes('?') ? '&' : '?';
   const u = `${base}${sep}action=upload&key=${encodeURIComponent(key)}`
           + `&ct=${encodeURIComponent(contentType || 'application/octet-stream')}`;
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', u);
-    xhr.setRequestHeader('Content-Type', 'text/plain');
-    if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
+
+  // 用 fetch() 替代 XHR：错误信息更精确（TypeError vs Response），
+  // 且部分手机浏览器对 fetch 的跨域处理比 XHR 更稳定
+  return fetch(u, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: blob,
+  }).then(resp => {
+    if (!resp.ok) {
+      return resp.text().then(t => {
         try {
-          const j = JSON.parse(xhr.responseText || '{}');
-          if (j.ok) return resolve(j);
-          return reject(new Error(j.err || '云函数返回失败'));
-        } catch { return reject(new Error('云函数返回无法解析')); }
-      }
-      let msg = `云函数 ${xhr.status}`;
-      try {
-        const m = /<Message>([^<]+)<\/Message>/.exec(xhr.responseText || '');
-        if (m) msg += ' · ' + m[1];
-      } catch { /* ignore */ }
-      reject(new Error(msg));
-    };
-    xhr.onerror = () => reject(new Error('网络错误：无法连接云函数中转地址'));
-    xhr.send(blob);
+          const j = JSON.parse(t || '{}');
+          throw new Error(j.err || `云函数 ${resp.status}`);
+        } catch (e) {
+          if (e.message.startsWith('云函数')) throw e;
+          throw new Error(`云函数 ${resp.status}: ${t.slice(0, 200)}`);
+        }
+      });
+    }
+    return resp.json().then(j => {
+      if (j.ok) return j;
+      throw new Error(j.err || '云函数返回失败');
+    });
+  }).catch(err => {
+    // TypeError = 网络层失败（DNS/TLS/连接/CORS 拦截），其他 = HTTP/业务错误
+    if (err instanceof TypeError) {
+      throw new Error('网络错误：无法连接云函数（' + err.message + '）');
+    }
+    throw err;
   });
+}
+
+/**
+ * 连通性诊断测试（3 步递进，用于排查手机端 onerror 根因）。
+ * 返回每步的结果描述数组，可在控制台查看或展示给用户。
+ */
+export async function cosDiagnose() {
+  const base = (localStorage.getItem(LS_RELAY) || '').trim();
+  if (!base) return [{ step: '配置', ok: false, msg: '未配置中转地址' }];
+  const results = [];
+
+  // Step 1: Image 加载测试（最轻量，测基本跨域可达性）
+  results.push(await new Promise(r => {
+    const img = new Image();
+    img.onload = () => r({ step: '1-Image', ok: true, msg: 'Image 可加载 ✅' });
+    img.onerror = () => r({ step: '1-Image', ok: false, msg: 'Image 加载失败 ❌' });
+    img.src = base + '?t=' + Date.now();
+    setTimeout(() => r({ step: '1-Image', ok: false, msg: 'Image 超时 ❌' }), 8000);
+  }));
+
+  // Step 2: fetch GET 测试（测 fetch API 跨域可达性）
+  try {
+    const r = await fetch(base + '?action=diag', { method: 'GET', cache: 'no-store' });
+    results.push({ step: '2-fetchGET', ok: true, msg: `fetch GET ${r.status} ✅` });
+  } catch (e) {
+    results.push({ step: '2-fetchGET', ok: false, msg: `fetch GET 失败: ${e.message} ❌` });
+  }
+
+  // Step 3: fetch POST 测试（测实际上传路径，发 1 字节）
+  try {
+    const r = await fetch(base + '?action=upload&key=__diag__&ct=text/plain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'x',
+    });
+    const t = await r.text();
+    results.push({ step: '3-fetchPOST', ok: true, msg: `fetch POST ${r.status}: ${t.slice(0,80)} ✅` });
+  } catch (e) {
+    results.push({ step: '3-fetchPOST', ok: false, msg: `fetch POST 失败: ${e.message} ❌` });
+  }
+
+  return results;
 }

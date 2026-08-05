@@ -3,7 +3,7 @@ import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast,
 import { gh } from './github.js';
 import { store, DEFAULT_DATA } from './store.js';
 import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js';
-import { cosReady, cosRelay } from './cos.js';
+import { cosReady, cosRelay, cosDiagnose } from './cos.js';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -838,6 +838,7 @@ function cosConfigBox() {
   const relayIn = input({ id: 'f_cos_relay', value: getCosSyncUrl(), placeholder: 'https://xxx.apigw.tencentcs.com/... 或 scf 函数URL' });
   const status = el('div', { class: 'hint', style: 'margin-top:8px' },
     cosReady() ? '✅ 已配置，上传经云函数中转（COS 密钥只在服务端，零暴露）' : '未配置：上传会退回 GitHub / 本机预览');
+  const diagResult = el('div', { class: 'hint', style: 'margin-top:6px;font-size:12px;color:var(--text2);display:none' });
   return el('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
     field('COS 中转地址（云函数 URL）', relayIn,
       '浏览器把图片发到这个云函数，由它在<b>服务端</b>用 COS 密钥直传桶——密钥只在服务器，访客浏览器完全拿不到，适合公开站点。'
@@ -851,6 +852,27 @@ function cosConfigBox() {
         toast(ok ? 'COS 中转已配置' : '已清除', ok ? 'ok' : '');
       },
     }, '保存 COS 中转地址'),
+    el('button', {
+      class: 'btn-ghost', style: 'width:100%;padding:8px;margin-top:6px',
+      onclick: async () => {
+        diagResult.style.display = 'block';
+        diagResult.innerHTML = '⏳ 正在诊断连通性...';
+        try {
+          const results = await cosDiagnose();
+          diagResult.innerHTML = results.map(r =>
+            `<div style="margin:2px 0">${r.ok ? '✅' : '❌'} ${r.step}: ${r.msg}</div>`
+          ).join('');
+          // 如果全部失败，给出具体建议
+          const allFail = results.every(r => !r.ok);
+          if (allFail) {
+            diagResult.innerHTML += '<div style="color:var(--danger);margin-top:6px">💡 建议：检查手机网络/WiFi、确认函数 URL 可在浏览器直接打开、或尝试切换网络环境</div>';
+          }
+        } catch (e) {
+          diagResult.innerHTML = `❌ 诊断异常: ${e.message}`;
+        }
+      },
+    }, '🔍 诊断连通性'),
+    diagResult,
     status
   );
 }
