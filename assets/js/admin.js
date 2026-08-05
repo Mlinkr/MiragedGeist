@@ -646,7 +646,18 @@ function openUploader(col) {
     else prev.append(el('video', { src: URL.createObjectURL(it.file), muted: '', preload: 'metadata' }));
     const status = el('div', { class: 'up-item-status' }, '待上传');
     const barFill = el('i', {});
-    const retry = el('button', { class: 'mini-btn', title: '重试', style: 'display:none', onclick: () => uploadOne(it) }, '↻');
+    /** BUG FIX: 获取当前有效的 mode/target/folder（闭包捕获最新值，供重试用） */
+    const getCtx = () => ({
+      mode: QUALITY[quality] || QUALITY.high,
+      target: cosReady() ? 'cos' : (gh.ready ? 'github' : 'local'),
+      folder: col.folder || folderOf(col) || col.title || col.id,
+    });
+
+    // BUG FIX: 重试按钮现在通过闭包 getCtx() 获取最新的 mode/target/folder
+    const retry = el('button', { class: 'mini-btn', title: '重试', style: 'display:none', onclick: () => {
+      const ctx = getCtx();
+      uploadOne(it, ctx.mode, ctx.target, ctx.folder);
+    } }, '↻');
     const remove = el('button', { class: 'mini-btn danger', title: '移除', onclick: () => removeItem(it) }, '✕');
     const node = el('div', { class: 'up-item' }, prev,
       el('div', { class: 'up-item-main' },
@@ -684,13 +695,13 @@ function openUploader(col) {
     const pending = items.filter(i => i.status === 'pending' || i.status === 'error');
     if (!pending.length) return toast('没有待上传的文件', '');
     running = true; startBtn.disabled = true; startBtn.textContent = '上传中…';
-    const mode = QUALITY[quality] || QUALITY.high;
+    const ctx = getCtx();
     const CONC = 3;
     let cursor = 0;
     const worker = async () => {
       while (cursor < pending.length) {
         const it = pending[cursor++];
-        await uploadOne(it, mode, target, folder);
+        await uploadOne(it, ctx.mode, ctx.target, ctx.folder);
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONC, pending.length) }, worker));
