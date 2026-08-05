@@ -6,6 +6,49 @@ import { store, DEFAULT_DATA } from './store.js?v=5';
 import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=5';
 import { cosReady, cosRelay, cosRelayPresigned, cosDiagnose } from './cos.js?v=6';
 
+/* ---------- 字节级自检：上传后把桶内文件读回，与本地原始字节比对 SHA256 ---------- */
+// 接受 File/Blob/ArrayBuffer，返回十六进制 SHA-256
+async function sha256Hex(input) {
+  const buf = input instanceof ArrayBuffer ? input : await input.arrayBuffer();
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// 把远端文件读回并与本地字节比对；ok=true 表示字节完全一致
+async function verifyIntegrity(localBlob, remoteUrl) {
+  try {
+    const [local, remote] = await Promise.all([
+      sha256Hex(localBlob),
+      sha256Hex(await (await fetch(remoteUrl, { cache: 'no-store' })).blob()),
+    ]);
+    return local === remote ? { ok: true, hash: local } : { ok: false, local, remote };
+  } catch (e) {
+    return { ok: null, err: e.message };
+  }
+}
+// 把校验结果渲染到上传项的「字节校验」行
+function paintInteg(it, v, isOriginal) {
+  if (!it._integ) return;
+  if (v.ok === true) {
+    it._integ.textContent = isOriginal ? '✅ 字节一致（SHA256 匹配，原图零压缩）' : '✅ 已上传（SHA256 匹配）';
+    it._integ.className = 'up-integ ok';
+  } else if (v.ok === null) {
+    it._integ.textContent = '⚠️ 无法校验（' + (v.err || '网络/跨域') + '），上传已成功';
+    it._integ.className = 'up-integ warn';
+  } else {
+    it._integ.textContent = '❌ 字节不一致！本地 ' + (v.local || '').slice(0, 10) + ' / 远端 ' + (v.remote || '').slice(0, 10);
+    it._integ.className = 'up-integ bad';
+  }
+}
+// 上传后回读校验：失败仅提示，不影响上传结果
+async function verifyAndPaint(it, localBlob, remoteUrl, isOriginal) {
+  try {
+    const v = await verifyIntegrity(localBlob, remoteUrl);
+    paintInteg(it, v, isOriginal);
+  } catch (e) {
+    if (it._integ) { it._integ.textContent = '⚠️ 无法校验（' + (e.message || '错误') + '）'; it._integ.className = 'up-integ warn'; }
+  }
+}
+
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
 const LS_QUALITY = 'mg_img_quality_v2'; // v5: 改名以丢弃旧版残留的 'high' 值,默认恢复原图直传
@@ -467,7 +510,7 @@ export async function removeCollection(kind, id) {
 
   store.data.works = store.data.works.filter(c => c.id !== id);
   changed();
-  if (location.hash.includes(id)) location.hash = '';
+  if (location.hash.includes(id) || location.hash.includes(encodeURIComponent(id))) location.hash = '';
   toast('专栏已删除', 'ok');
 }
 
@@ -483,7 +526,7 @@ export function openFilmForm(existing) {
 
   const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '' });
   if (!f.image) imgEl.style.display = 'none';
-  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl) },
+  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl, titleIn) },
     el('div', {}, f.image ? '点击更换影视图片' : '点击上传影视图片'),
     el('div', { class: 'hint' }, '海报 / 剧照，建议竖图')
   );
@@ -533,17 +576,31 @@ export function openFilmForm(existing) {
   openDrawer(existing ? '编辑影视' : '添加影视', box);
 }
 
-/** 影视图片：连接仓库就上传，否则退化为本地 dataURL */
-async function pickFilmImage(f, imgEl) {
+/** 影视图片：COS 优先直传到 Cut/ 文件夹，未配置则退化为 GitHub / dataURL */
+async function pickFilmImage(f, imgEl, titleIn) {
   const [file] = await pickFiles({ accept: 'image/*' });
   if (!file) return;
   busy(true, '上传影视图片…');
   try {
-    const blob = await compressImage(file, 1400, .92);
-    const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
-    f.image = path;
-    imgEl.src = path; imgEl.style.display = '';
-    toast('图片已选好，保存后生效', 'ok');
+    // ★ COS 直传：原图字节级写入桶的 Cut/ 文件夹
+    if (cosReady()) {
+      const ctype = file.type || 'image/jpeg';
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      // 用输入框当前值做子目录名（用户可能还没点保存，f.title 还是空的）
+      const folder = (titleIn && titleIn.value.trim()) || f.title || 'films';
+      const safeFolder = folder.replace(/[^\w一-龥\-]/g, '-') || 'films';
+      const r = await cosRelay(`Cut/${safeFolder}/${f.id}.${ext}`, file, ctype);
+      f.image = r.url;
+      imgEl.src = r.url; imgEl.style.display = '';
+      toast('图片已上传至 COS（Cut 文件夹），保存后生效', 'ok');
+    } else {
+      // 兜底：GitHub 或本地 dataURL
+      const blob = await compressImage(file, 1400, .92);
+      const path = await storeMedia(blob, `media/films/${f.id}/${uid()}`, 'jpg');
+      f.image = path;
+      imgEl.src = path; imgEl.style.display = '';
+      toast('图片已选好，保存后生效', 'ok');
+    }
   } catch (e) {
     toast('上传失败：' + e.message, 'err');
   } finally {
@@ -715,10 +772,12 @@ function openUploader(col) {
         el('b', {}, it.file.name),
         el('span', {}, fmtSize(it.file.size) + ' · ' + (it.kind === 'image' ? '图片' : '视频')),
         status,
-        el('div', { class: 'up-bar' }, barFill)
+        el('div', { class: 'up-bar' }, barFill),
+        el('div', { class: 'up-integ' }, '')
       ),
       remove, retry);
     it._node = node; it._status = status; it._bar = barFill; it._retry = retry;
+    it._integ = node.querySelector('.up-integ');
     list.append(node);
   }
   function removeItem(it) {

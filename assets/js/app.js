@@ -3,7 +3,7 @@
 import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js?v=5';
 import { store, featuredOf, placeholder } from './store.js?v=5';
 import { PLATFORMS } from './social.js?v=5';
-import * as admin from './admin.js?v=8';
+import * as admin from './admin.js?v=9';
 
 /* ============ 渲染 ============ */
 
@@ -165,7 +165,7 @@ function collectionCard(kind, col) {
     }, col.title || '未命名专栏'),
     el('span', { class: 'col-count small' }, `${col.items.length} 件`),
     el('span', { class: 'col-flex' }),
-    el('a', { class: 'col-more icon', href: `#/c/${kind}/${col.id}`, title: '查看全部' }, '→'),
+    el('a', { class: 'col-more icon', href: `#/c/${kind}/${encodeURIComponent(col.id)}`, title: '查看全部' }, '→'),
     el('span', { class: 'col-tools' },
       el('button', { class: 'mini-btn', title: '编辑 / 删除', onclick: e => { e.stopPropagation(); admin.openCollectionForm(col); } }, '✎'),
       el('button', { class: 'mini-btn', title: '上移', onclick: e => { e.stopPropagation(); admin.moveCollection(kind, idx, -1); } }, '↑'),
@@ -341,7 +341,7 @@ let filmModalFilm = null;      // 当前弹层展示的影视对象
 
 function renderDetail(kind, id) {
   const col = store.findCollection(kind, id);
-  if (!col) { location.hash = ''; return; }
+  if (!col) { /* 不再静默清 hash 跳首页，保留 URL 方便排查 */ return; }
   const sameCol = currentDetail && currentDetail.id === id;
   if (!sameCol) detailPage = 0;   // 进入新专栏时回到第一页
   currentDetail = { kind, id };
@@ -664,7 +664,7 @@ function route() {
   if (m) {
     $('#view-home').hidden = true;
     $('#view-detail').hidden = false;
-    renderDetail('works', m[1]);
+    renderDetail('works', decodeURIComponent(m[1]));
     window.scrollTo(0, 0);
     return;
   }
@@ -684,7 +684,7 @@ function route() {
   // 兼容旧版路由，自动重定向到新路由
   const old = h.match(/^#\/c\/(photos|videos)\/(.+)$/);
   if (old) {
-    location.replace(`#/c/works/${old[2]}`);
+    location.replace(`#/c/works/${encodeURIComponent(decodeURIComponent(old[2]))}`);
     return;
   }
   $('#view-detail').hidden = true;
