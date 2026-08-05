@@ -1,10 +1,10 @@
 /* 管理模式：连接仓库 · 编辑内容 · 上传媒体 · 一键发布 */
 /* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
-import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=4';
-import { gh } from './github.js?v=4';
-import { store, DEFAULT_DATA } from './store.js?v=4';
-import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=4';
-import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=4';
+import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=5';
+import { gh } from './github.js?v=5';
+import { store, DEFAULT_DATA } from './store.js?v=5';
+import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=5';
+import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=5';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';
@@ -572,6 +572,18 @@ export async function uploadTo(kind, colId) {
   openUploader(col);
 }
 
+/* 把常见底层错误翻译成易懂的中文提示（上传失败时对用户更友好） */
+function describeError(e) {
+  const m = (e && e.message) || String(e || '未知错误');
+  if (/abort|取消/i.test(m)) return '已取消';
+  if (/超时|timeout/i.test(m)) return m;
+  if (/CORS|跨域|Access-Control/i.test(m)) return '跨域被拦截：请确认云函数已开启 CORS（Access-Control-Allow-Origin: *）';
+  if (/network|网络|DNS|TLS|连接|offline/i.test(m)) return '网络错误：无法连接服务器，请检查网络后重试';
+  if (/8MB|20MB|45MB|过大|Payload|413/i.test(m)) return m;
+  if (/未配置|not configured/i.test(m)) return '存储未配置：请先在管理面板填写 COS 中转地址或连接 GitHub';
+  return m || '未知错误';
+}
+
 function openUploader(col) {
   const folder = col.folder || folderOf(col) || col.title || col.id;
   const target = cosReady() ? 'cos' : (gh.ready ? 'github' : 'local');
@@ -581,9 +593,22 @@ function openUploader(col) {
       ? `GitHub 仓库 media/works/${col.id}/`
       : `本机预览（未连接任何存储，不会保存）⚠`;
 
-  const items = [];               // {id, file, kind, status, progress, err, result, _node, _status, _bar, _retry}
+  const items = [];               // {id, file, kind, status, progress, err, result, committed, _node, _status, _bar, _retry}
   let quality = getQuality();
   let running = false;
+
+  /* ★ 关键修复：getCtx 必须定义在 openUploader 作用域。
+     旧代码把它写在 renderItem() 内部，runUpload() 调用时抛 ReferenceError，
+     而 runUpload 在抛错前已把按钮置为「上传中…」且 running=true，于是 UI 永久卡死。
+     现在 runUpload 与重试按钮都能正确取到最新的 mode/target/folder。 */
+  function getCtx() {
+    return {
+      mode: QUALITY[quality] || QUALITY.high,
+      target: cosReady() ? 'cos' : (gh.ready ? 'github' : 'local'),
+      folder: col.folder || folderOf(col) || col.title || col.id,
+      ghBase: `media/works/${col.id}`,
+    };
+  }
 
   // 画质选择
   const qSeg = el('div', { class: 'seg' });
@@ -600,7 +625,7 @@ function openUploader(col) {
   const pick = () => fileInput.click();
   const drop = el('div', { class: 'up-zone', tabindex: '0' },
     el('div', { style: 'font-size:15px;margin-bottom:6px' }, '把图片 / 视频拖到这里'),
-    el('div', { class: 'hint', style: 'margin-top:6px' }, '或点击选择（可一次选多张）· 支持图片与原画质视频')
+    el('div', { class: 'hint', style: 'margin-top:6px' }, '或点击选择（可一次选多张）· 支持图片与视频')
   );
   const stop = e => { e.preventDefault(); e.stopPropagation(); };
   drop.onclick = pick;
@@ -647,17 +672,10 @@ function openUploader(col) {
     else prev.append(el('video', { src: URL.createObjectURL(it.file), muted: '', preload: 'metadata' }));
     const status = el('div', { class: 'up-item-status' }, '待上传');
     const barFill = el('i', {});
-    /** BUG FIX: 获取当前有效的 mode/target/folder（闭包捕获最新值，供重试用） */
-    const getCtx = () => ({
-      mode: QUALITY[quality] || QUALITY.high,
-      target: cosReady() ? 'cos' : (gh.ready ? 'github' : 'local'),
-      folder: col.folder || folderOf(col) || col.title || col.id,
-    });
-
-    // BUG FIX: 重试按钮现在通过闭包 getCtx() 获取最新的 mode/target/folder
+    // 重试按钮通过闭包 getCtx()（已提升到 openUploader 作用域）拿到最新 mode/target/folder
     const retry = el('button', { class: 'mini-btn', title: '重试', style: 'display:none', onclick: () => {
-      const ctx = getCtx();
-      uploadOne(it, ctx.mode, ctx.target, ctx.folder);
+      if (running) return toast('请等待当前上传完成', '');
+      uploadOne(it, getCtx());
     } }, '↻');
     const remove = el('button', { class: 'mini-btn danger', title: '移除', onclick: () => removeItem(it) }, '✕');
     const node = el('div', { class: 'up-item' }, prev,
@@ -685,43 +703,59 @@ function openUploader(col) {
     if (it._node) { it._node.classList.toggle('done', s === 'done'); it._node.classList.toggle('error', s === 'error'); }
     if (it._retry) it._retry.style.display = s === 'error' ? '' : 'none';
   }
+  // 原子化 UI 状态：上传中禁用按钮并锁定，结束后复原，避免界面卡死
+  function setRunningUI(on) {
+    running = on;
+    startBtn.disabled = on;
+    startBtn.textContent = on ? '上传中…' : '开始上传';
+    clearBtn.disabled = on;
+  }
   function clearAll() {
     if (running) return toast('上传中，无法清空', 'err');
     items.forEach(it => it._node?.remove());
     items.length = 0; emptyHint.hidden = false; refreshSummary();
+  }
+  /* 上传成功后把作品并入专栏；幂等（已并入则跳过），修复「重试成功却不显示」的问题 */
+  function commitDone(it) {
+    if (it.committed || !it.result) return false;
+    it.committed = true;
+    col.items.push({
+      id: uid(), src: it.result.src, thumb: it.result.thumb || '',
+      poster: it.result.poster || '', kind: it.result.kind,
+      title: cleanName(it.file.name), star: col.items.length < 3,
+    });
+    changed();
+    return true;
   }
 
   async function runUpload() {
     if (running) return;
     const pending = items.filter(i => i.status === 'pending' || i.status === 'error');
     if (!pending.length) return toast('没有待上传的文件', '');
-    running = true; startBtn.disabled = true; startBtn.textContent = '上传中…';
     const ctx = getCtx();
+    setRunningUI(true);
+    pending.forEach(it => { if (it.status === 'error') { setStatus(it, 'pending', '待上传'); setProgress(it, 0); } });
     const CONC = 3;
     let cursor = 0;
     const worker = async () => {
       while (cursor < pending.length) {
         const it = pending[cursor++];
-        await uploadOne(it, ctx.mode, ctx.target, ctx.folder);
+        await uploadOne(it, ctx);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(CONC, pending.length) }, worker));
-    running = false; startBtn.disabled = false; startBtn.textContent = '开始上传';
-    refreshSummary();
-    const added = items.filter(i => i.status === 'done' && i.result);
-    if (added.length) {
-      for (const it of added) {
-        col.items.push({
-          id: uid(), src: it.result.src, thumb: it.result.thumb || '',
-          poster: it.result.poster || '', kind: it.result.kind,
-          title: cleanName(it.file.name), star: col.items.length < 3,
-        });
-      }
-      changed();
-      toast(`已上传 ${added.length} 件，记得点「发布」`, 'ok');
+    try {
+      await Promise.all(Array.from({ length: Math.min(CONC, pending.length) }, worker));
+    } catch (e) {
+      // uploadOne 内部已吞掉单项异常，这里仅兜底
+      toast('上传流程异常：' + (e.message || e), 'err');
+    } finally {
+      setRunningUI(false);   // 无论如何都会复原按钮，杜绝「永久上传中」
+      refreshSummary();
+      const added = items.filter(i => i.committed);
+      if (added.length) toast(`已上传 ${added.length} 件，记得点「发布」`, 'ok');
+      const failed = items.filter(i => i.status === 'error');
+      if (failed.length) toast(`${failed.length} 个上传失败，可点 ↻ 重试`, 'err');
     }
-    const failed = items.filter(i => i.status === 'error');
-    if (failed.length) toast(`${failed.length} 个上传失败，可点 ↻ 重试`, 'err');
   }
 
   /** 给异步操作加超时（毫秒），超时自动 reject */
@@ -733,10 +767,11 @@ function openUploader(col) {
     ]);
   }
 
-  async function uploadOne(it, mode, target, folder) {
-    if (!it.file) return;
-    setStatus(it, 'uploading', '上传中…'); setProgress(it, 0);
+  async function uploadOne(it, ctx) {
+    if (!it.file || it.status === 'done') return;
+    setStatus(it, 'uploading', '准备中…'); setProgress(it, 0);
     const name = uid();
+    const mode = ctx.mode;
     // ★ 单文件总超时：3 分钟（压缩 + 上传原图 + 上传缩略图）
     const TOTAL_TIMEOUT_MS = 180_000;
     const deadline = Date.now() + TOTAL_TIMEOUT_MS;
@@ -745,7 +780,7 @@ function openUploader(col) {
     };
 
     try {
-      if (target === 'cos') {
+      if (ctx.target === 'cos') {
         if (it.kind === 'image') {
           // ---- 阶段 1：压缩原图 ----
           setStatus(it, 'uploading', '压缩中…');
@@ -756,30 +791,30 @@ function openUploader(col) {
           if (blob.size > 8 * 1024 * 1024) throw new Error('压缩后仍超过 8MB，请改用「标准」画质或选更小的图');
           // ---- 阶段 2：上传原图到 COS ----
           setStatus(it, 'uploading', '上传中… (1/2)');
-          const r1 = await cosRelay(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.80));
+          const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.80));
           checkTimeout();
           // ---- 阶段 3：生成并上传缩略图 ----
           setStatus(it, 'uploading', '上传缩略图…');
           const thumb = await withTimeout(compressImage(it.file, 700, .8), 30_000, '缩略图压缩');
           checkTimeout();
-          const r2 = await cosRelay(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.80 + p * 0.20));
+          const r2 = await cosRelay(`Photos/${ctx.folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.80 + p * 0.20));
           it.result = { src: r1.url, thumb: r2.url, kind: 'image' };
         } else {
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
           if (it.file.size > 20 * 1024 * 1024) throw new Error('视频超过 20MB，中转可能超限，建议压缩后传');
           setStatus(it, 'uploading', '上传视频中…');
-          const r1 = await cosRelay(`Photos/${folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
+          const r1 = await cosRelay(`Photos/${ctx.folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
           checkTimeout();
           const poster = await withTimeout(videoPoster(it.file), 15_000, '视频截帧').catch(() => null);
           let posterUrl = '';
           if (poster) {
             checkTimeout();
-            const r2 = await cosRelay(`Photos/${folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
+            const r2 = await cosRelay(`Photos/${ctx.folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
             posterUrl = r2.url;
           } else setProgress(it, 1);
           it.result = { src: r1.url, poster: posterUrl, thumb: posterUrl, kind: 'video' };
         }
-      } else if (target === 'github') {
+      } else if (ctx.target === 'github') {
         const base = `media/works/${col.id}/${name}`;
         if (it.kind === 'image') {
           let src, ext = 'jpg';
@@ -836,15 +871,16 @@ function openUploader(col) {
       }
       setProgress(it, 1);
       setStatus(it, 'done', '✓ 已完成');
+      commitDone(it);
     } catch (e) {
-      setStatus(it, 'error', '✗ ' + (e.message || '失败'));
+      setStatus(it, 'error', '✗ ' + describeError(e));
     }
   }
 
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v2.2')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.0')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
