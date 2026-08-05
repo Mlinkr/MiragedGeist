@@ -617,7 +617,7 @@ function openUploader(col) {
   Object.entries(QUALITY).forEach(([k, v]) => {
     qSeg.append(el('button', {
       class: k === quality ? 'on' : '',
-      onclick: e => { quality = k; setQuality(k); [...qSeg.children].forEach(c => c.classList.remove('on')); e.target.classList.add('on'); },
+      onclick: e => { quality = k; setQuality(k); [...qSeg.children].forEach(c => c.classList.remove('on')); e.target.classList.add('on'); paintMode(); },
     }, v.label));
   });
 
@@ -643,6 +643,7 @@ function openUploader(col) {
   const emptyHint = el('div', { class: 'up-empty' }, '还没有选择文件');
   list.append(emptyHint);
   const summary = el('div', { class: 'up-summary' });
+  const modeBanner = el('div', { class: 'up-mode-banner' });
 
   const startBtn = el('button', { class: 'btn-solid', onclick: runUpload }, '开始上传');
   const clearBtn = el('button', { class: 'btn-ghost', onclick: clearAll }, '清空列表');
@@ -658,6 +659,21 @@ function openUploader(col) {
     const done = items.filter(i => i.status === 'done').length;
     const err = items.filter(i => i.status === 'error').length;
     summary.textContent = total ? `共 ${total} 个 · 已完成 ${done}${err ? ` · 失败 ${err}` : ''}` : '';
+  }
+  /* 模式指示条：一眼确认是否原图直传，且显示将上传的原始总体积 */
+  function paintMode() {
+    const q = QUALITY[quality] || QUALITY.origin;
+    const isO = q.maxSide === 0;
+    const total = items.reduce((s, it) => s + (it.file?.size || 0), 0);
+    const mb = total / 1048576;
+    const sz = mb >= 1 ? mb.toFixed(1) + 'MB' : (mb * 1024).toFixed(0) + 'KB';
+    if (isO) {
+      modeBanner.style.cssText = 'margin:10px 0;padding:8px 12px;border-radius:8px;background:#16361f;color:#7be0a0;border:1px solid #2e6b45;font-size:13px;line-height:1.5';
+      modeBanner.textContent = `✅ 原图直传 · 将按原始字节上传 ${items.length} 个（共 ${sz}），零压缩`;
+    } else {
+      modeBanner.style.cssText = 'margin:10px 0;padding:8px 12px;border-radius:8px;background:#3a2c16;color:#f0c078;border:1px solid #6b4e2e;font-size:13px;line-height:1.5';
+      modeBanner.textContent = `⚠️ 当前「${q.label}」会压缩上传！点上方「原图直传」关闭压缩`;
+    }
   }
   function addFiles(files) {
     for (const f of files) {
@@ -680,6 +696,7 @@ function openUploader(col) {
     }
     if (files.length) emptyHint.hidden = true;
     refreshSummary();
+    paintMode();
   }
   function renderItem(it) {
     const prev = el('div', { class: 'up-thumb' });
@@ -710,6 +727,7 @@ function openUploader(col) {
     it._node?.remove();
     if (!items.length) emptyHint.hidden = false;
     refreshSummary();
+    paintMode();
   }
   function setProgress(it, p) { it.progress = p; if (it._bar) it._bar.style.width = Math.round(p * 100) + '%'; }
   function setStatus(it, s, text) {
@@ -729,6 +747,7 @@ function openUploader(col) {
     if (running) return toast('上传中，无法清空', 'err');
     items.forEach(it => it._node?.remove());
     items.length = 0; emptyHint.hidden = false; refreshSummary();
+    paintMode();
   }
   /* 上传成功后把作品并入专栏；幂等（已并入则跳过），修复「重试成功却不显示」的问题 */
   function commitDone(it) {
@@ -963,13 +982,15 @@ function openUploader(col) {
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v4.0')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v5.0')),
     field('上传画质', qSeg, '原图直传：零压缩、保留原始格式与尺寸（v4.0 预签名直传，无大小限制）；高画质/标准：自动压缩后再传。'),
+    modeBanner,
     drop,
     list,
     summary,
     el('div', { class: 'drawer-actions', style: 'margin-top:16px' }, clearBtn, addBtn, startBtn)
   );
+  paintMode();
   openDrawer(`上传作品 · ${col.title || '未命名专栏'}`, box);
 }
 
