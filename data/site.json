@@ -1362,41 +1362,6 @@
           "star": false
         }
       ]
-    },
-    {
-      "id": "黄羿",
-      "title": "黄羿",
-      "desc": "",
-      "items": [
-        {
-          "id": "msg7gw0ft7nfl",
-          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e49ojmo.jpg",
-          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e49ojmo-t.jpg",
-          "poster": "",
-          "kind": "image",
-          "title": "IMG 4260",
-          "star": true
-        },
-        {
-          "id": "msg7h2t95w4f7",
-          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e680fm4.jpg",
-          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e680fm4-t.jpg",
-          "poster": "",
-          "kind": "image",
-          "title": "IMG 4261",
-          "star": true
-        },
-        {
-          "id": "msg7h4nnqtjw1",
-          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e5gxkcf.jpg",
-          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%BB%84%E7%BE%BF/msg7g8e5gxkcf-t.jpg",
-          "poster": "",
-          "kind": "image",
-          "title": "IMG 4259",
-          "star": true
-        }
-      ],
-      "folder": "黄羿"
     }
   ],
   "films": [
@@ -1489,5 +1454,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-05T14:52:53.981Z"
+  "updatedAt": "2026-08-05T14:55:32.723Z"
 }
