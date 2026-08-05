@@ -1,9 +1,10 @@
 /* 管理模式：连接仓库 · 编辑内容 · 上传媒体 · 一键发布 */
-import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js';
-import { gh } from './github.js';
-import { store, DEFAULT_DATA } from './store.js';
-import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js';
-import { cosReady, cosRelay, cosDiagnose } from './cos.js';
+/* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
+import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=2';
+import { gh } from './github.js?v=2';
+import { store, DEFAULT_DATA } from './store.js?v=2';
+import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=2';
+import { cosReady, cosRelay, cosDiagnose } from './cos.js?v=2';
 
 const LS_EDIT = 'mg_editing';
 const LS_LOCAL = 'mg_local_data';

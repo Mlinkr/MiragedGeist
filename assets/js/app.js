@@ -1,8 +1,9 @@
 /* 入口：渲染 · 路由 · 灯箱 */
-import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js';
-import { store, featuredOf, placeholder } from './store.js';
-import { PLATFORMS } from './social.js';
-import * as admin from './admin.js';
+/* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
+import { $, $$, el, fmtNum, md2html, closeDrawer, openDrawer, field, actions, toast } from './ui.js?v=2';
+import { store, featuredOf, placeholder } from './store.js?v=2';
+import { PLATFORMS } from './social.js?v=2';
+import * as admin from './admin.js?v=2';
 
 /* ============ 渲染 ============ */
 
