@@ -13,11 +13,12 @@
  *
  * 与直传相比：桶本身【不需要】开 PUT CORS，跨域由云函数中转地址承担。
  *
- * v2 修复说明：
- *   - 改用 XMLHttpRequest 替代 fetch：XHR 的 upload.onprogress 能真实上报
- *     上传进度（fetch API 不支持上传进度），解决「一直显示上传中」的假死感。
- *   - 新增 120 秒超时自动取消：手机网络波动时不再无限挂起。
- *   - 超时 / 取消 / 网络 / 服务端 四类错误分别给出明确提示。
+ * v3 修复说明：
+ *   - ★ 强制将入参 Blob 重新包装为 type='text/plain' 的新 Blob 再发送，
+ *     防止手机浏览器用文件原始 MIME（如 image/jpeg）覆盖请求头、触发
+ *     CORS 预检 OPTIONS，导致部分手机报「跨域被拦截」。
+ *   - 错误信息附带 HTTP 状态码与响应摘要，方便排查。
+ *   - XMLHttpRequest + upload.onprogress（真实进度）+ 120s 超时保护不变。
  * =========================================================== */
 
 const LS_RELAY = 'mg_cos_sync_url';
@@ -42,9 +43,16 @@ export function cosReady() {
  *   - XHR.timeout + xhr.abort() 可靠地实现超时取消
  *   - 手机浏览器对 XHR POST 的兼容性久经考验
  *
+ * ★ v3 关键修复：send() 前将 blob 重新包装为 type='text/plain'。
+ *   部分手机浏览器在 xhr.send(File) 时会忽略 setRequestHeader 设的
+ *   Content-Type，改用文件自身的 MIME（如 image/jpeg），而 image/jpeg
+ *   不属于 CORS「简单请求」的三种允许值之一 → 触发 OPTIONS 预检 →
+ *   在弱网/运营商劫持场景下预检失败 → 报「跨域被拦截」。
+ *   用 new Blob([blob], {type:'text/plain'}) 强制类型可彻底规避此问题。
+ *
  * @param {string} key        对象键，如 Photos/folder/name.jpg
  * @param {Blob}   blob        内容（原始图 / 缩略图 / 视频 / 封面帧）
- * @param {string} contentType MIME
+ * @param {string} contentType 真实 MIME（通过 query 参数 ct 传给云函数）
  * @param {(p:number)=>void} [onProgress] 0~1 上传进度回调（每 ~50ms 触发一次）
  * @returns {Promise<{ok:boolean,key:string,url:string}>}
  */
@@ -87,23 +95,25 @@ export function cosRelay(key, blob, contentType, onProgress) {
         try {
           const j = JSON.parse(xhr.responseText);
           if (j.ok) return resolve(j);
-          reject(new Error(j.err || '云函数返回失败'));
+          reject(new Error(j.err || `云函数业务失败(HTTP ${xhr.status})`));
         } catch (_) {
-          reject(new Error(`云函数 ${xhr.status}: ${xhr.responseText.slice(0, 200)}`));
+          reject(new Error(`云函数响应非JSON(HTTP ${xhr.status}): ${xhr.responseText.slice(0, 200)}`));
         }
       } else {
-        // HTTP 错误（4xx / 5xx）
-        try {
-          const j = JSON.parse(xhr.responseText || '{}');
-          reject(new Error(j.err || `云函数 ${xhr.status}`));
-        } catch (_) {
-          reject(new Error(`云函数 ${xhr.status}: ${xhr.responseText.slice(0, 200)}`));
-        }
+        // HTTP 错误（4xx / 5xx）—— 尝试解析错误体
+        let detail = '';
+        try { const j = JSON.parse(xhr.responseText || '{}'); detail = j.err || ''; } catch (_) { detail = xhr.responseText.slice(0, 120); }
+        reject(new Error(`云函数返回 HTTP ${xhr.status}${detail ? ': ' + detail : ''}`));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('网络错误：无法连接云函数（DNS/TLS/CORS 拦截或离线）'));
+      // onerror 在网络层失败 / CORS 拦截时触发（无法读取 status/responseText）
+      reject(new Error(
+        '网络错误或跨域拦截：无法连接云函数。' +
+        '可能原因：① 手机网络不稳 ② 运营商劫持 HTTPS ③ 云函数未开 CORS。' +
+        '建议：切换 WiFi/4G 重试，或在管理面板运行「连通性诊断」。'
+      ));
     };
 
     xhr.ontimeout = () => {
@@ -117,7 +127,12 @@ export function cosRelay(key, blob, contentType, onProgress) {
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'text/plain');
-    xhr.send(blob);
+    // ★ v3 核心：强制包装为 text/plain 类型的 Blob，
+    //   防止手机浏览器用文件原始 MIME 覆盖请求头导致触发 CORS 预检
+    const safeBlob = blob instanceof Blob
+      ? new Blob([blob], { type: 'text/plain' })
+      : blob;
+    xhr.send(safeBlob);
   });
 }
 

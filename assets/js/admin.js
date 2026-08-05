@@ -767,6 +767,12 @@ function openUploader(col) {
     ]);
   }
 
+  /** 判断错误是否属于「可降级」类型（网络/CORS/超时），这类错误换一条路径可能成功 */
+  function isFallbackError(e) {
+    const m = (e && e.message) || '';
+    return /网络|CORS|跨域|超时|timeout|连接|DNS|TLS|offline/i.test(m);
+  }
+
   async function uploadOne(it, ctx) {
     if (!it.file || it.status === 'done') return;
     setStatus(it, 'uploading', '准备中…'); setProgress(it, 0);
@@ -781,7 +787,9 @@ function openUploader(col) {
 
     try {
       if (ctx.target === 'cos') {
-        if (it.kind === 'image') {
+        /* ★ COS 上传：独立 try/catch，失败可降级到 GitHub */
+        try {
+          if (it.kind === 'image') {
           // ---- 阶段 1：压缩原图 ----
           setStatus(it, 'uploading', '压缩中…');
           const blob = mode.maxSide === 0 ? it.file
@@ -813,6 +821,52 @@ function openUploader(col) {
             posterUrl = r2.url;
           } else setProgress(it, 1);
           it.result = { src: r1.url, poster: posterUrl, thumb: posterUrl, kind: 'video' };
+        }
+        /* ---- COS 分支结束 ---- */
+        } catch (cosErr) {
+          // ★ 可降级错误（网络/CORS/超时）+ GitHub 已连接 → 自动降级
+          if (isFallbackError(cosErr) && gh.ready) {
+            console.warn('[upload] COS 失败，降级到 GitHub:', cosErr.message);
+            setStatus(it, 'uploading', 'COS 不可用，降级到 GitHub…'); setProgress(it, 0);
+            /* ---- GitHub 降级上传（与下方 github 分支逻辑一致） ---- */
+            const ghBase = `media/works/${col.id}/${name}`;
+            try {
+              if (it.kind === 'image') {
+                let src;
+                if (mode.maxSide === 0) {
+                  setStatus(it, 'uploading', 'GitHub 上传原图…');
+                  const ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+                  src = await withTimeout(storeMedia(it.file, ghBase, ext), 90_000, 'GitHub 上传原图');
+                } else {
+                  setStatus(it, 'uploading', '压缩中…');
+                  const compressed = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+                  checkTimeout();
+                  setStatus(it, 'uploading', 'GitHub 上传中…');
+                  src = await withTimeout(storeMedia(compressed, ghBase, 'jpg'), 90_000, 'GitHub 上传');
+                }
+                checkTimeout(); setProgress(it, 0.80);
+                setStatus(it, 'uploading', 'GitHub 上传缩略图…');
+                const thumb = await withTimeout(
+                  storeMedia(await withTimeout(compressImage(it.file, 700, .8), 30_000, '缩略图压缩'), ghBase + '-t', 'jpg'),
+                  60_000, 'GitHub 上传缩略图'
+                );
+                it.result = { src, thumb, kind: 'image' };
+              } else {
+                const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase();
+                setStatus(it, 'uploading', 'GitHub 上传视频…');
+                const src = await withTimeout(storeMedia(it.file, ghBase, ext), 120_000, 'GitHub 上传视频');
+                checkTimeout(); setProgress(it, 0.85);
+                const poster = await withTimeout(videoPoster(it.file), 15_000, '视频截帧').catch(() => null);
+                let posterPath = '';
+                if (poster) { checkTimeout(); posterPath = await withTimeout(storeMedia(poster, `${ghBase}-p`, 'jpg'), 60_000, 'GitHub 上传封面'); }
+                it.result = { src, poster: posterPath, thumb: posterPath, kind: 'video' };
+              }
+            } catch (ghErr) {
+              throw new Error(`COS 与 GitHub 均失败。COS: ${cosErr.message} | GitHub: ${ghErr.message}`);
+            }
+          } else {
+            throw cosErr; // 不可降级（如文件过大/业务错误），或 GitHub 未连接 → 原样抛出
+          }
         }
       } else if (ctx.target === 'github') {
         const base = `media/works/${col.id}/${name}`;
@@ -880,7 +934,7 @@ function openUploader(col) {
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.0')),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v3.1')),
     field('上传画质', qSeg, '原图直传：不压缩、体积大（COS 建议 < 20MB）；高画质/标准：自动压缩后再传。'),
     drop,
     list,
