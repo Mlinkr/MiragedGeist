@@ -723,27 +723,56 @@ function openUploader(col) {
     if (failed.length) toast(`${failed.length} 个上传失败，可点 ↻ 重试`, 'err');
   }
 
+  /** 给异步操作加超时（毫秒），超时自动 reject */
+  function withTimeout(promise, ms, label) {
+    if (ms <= 0) return promise;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} 超时（${Math.round(ms / 1000)}s），图片过大或手机性能不足，请换小图或降低画质`)), ms)),
+    ]);
+  }
+
   async function uploadOne(it, mode, target, folder) {
     if (!it.file) return;
     setStatus(it, 'uploading', '上传中…'); setProgress(it, 0);
     const name = uid();
+    // ★ 单文件总超时：3 分钟（压缩 + 上传原图 + 上传缩略图）
+    const TOTAL_TIMEOUT_MS = 180_000;
+    const deadline = Date.now() + TOTAL_TIMEOUT_MS;
+    const checkTimeout = () => {
+      if (Date.now() > deadline) throw new Error('上传总超时（3min）：网络过慢或文件过大，请重试');
+    };
+
     try {
       if (target === 'cos') {
         if (it.kind === 'image') {
-          const blob = mode.maxSide === 0 ? it.file : await compressImage(it.file, mode.maxSide, mode.q);
+          // ---- 阶段 1：压缩原图 ----
+          setStatus(it, 'uploading', '压缩中…');
+          const blob = mode.maxSide === 0 ? it.file
+            : await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+          checkTimeout();
           const ctype = mode.maxSide === 0 ? (it.file.type || 'image/jpeg') : 'image/jpeg';
-          if (blob.size > 8 * 1024 * 1024) throw new Error('图片过大（>8MB），请改用「高画质」压缩后再传');
-          const r1 = await cosRelay(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.85));
-          const thumb = await compressImage(it.file, 700, .8);
-          const r2 = await cosRelay(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.85 + p * 0.15));
+          if (blob.size > 8 * 1024 * 1024) throw new Error('压缩后仍超过 8MB，请改用「标准」画质或选更小的图');
+          // ---- 阶段 2：上传原图到 COS ----
+          setStatus(it, 'uploading', '上传中… (1/2)');
+          const r1 = await cosRelay(`Photos/${folder}/${name}.jpg`, blob, ctype, p => setProgress(it, p * 0.80));
+          checkTimeout();
+          // ---- 阶段 3：生成并上传缩略图 ----
+          setStatus(it, 'uploading', '上传缩略图…');
+          const thumb = await withTimeout(compressImage(it.file, 700, .8), 30_000, '缩略图压缩');
+          checkTimeout();
+          const r2 = await cosRelay(`Photos/${folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.80 + p * 0.20));
           it.result = { src: r1.url, thumb: r2.url, kind: 'image' };
         } else {
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
           if (it.file.size > 20 * 1024 * 1024) throw new Error('视频超过 20MB，中转可能超限，建议压缩后传');
+          setStatus(it, 'uploading', '上传视频中…');
           const r1 = await cosRelay(`Photos/${folder}/${name}.${ext}`, it.file, it.file.type || 'video/mp4', p => setProgress(it, p * 0.8));
-          const poster = await videoPoster(it.file).catch(() => null);
+          checkTimeout();
+          const poster = await withTimeout(videoPoster(it.file), 15_000, '视频截帧').catch(() => null);
           let posterUrl = '';
           if (poster) {
+            checkTimeout();
             const r2 = await cosRelay(`Photos/${folder}/${name}-p.jpg`, poster, 'image/jpeg', p => setProgress(it, 0.8 + p * 0.2));
             posterUrl = r2.url;
           } else setProgress(it, 1);
