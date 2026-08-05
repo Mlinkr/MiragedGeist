@@ -274,6 +274,43 @@ def main_handler(event, context):
             _api('PUT', '/' + d, headers={'x-cos-copy-source': f'/{BUCKET}/{urllib.parse.quote(s, safe="/")}'})
             _api('DELETE', '/' + s)
             return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True}, ensure_ascii=False), 'isBase64Encoded': False}
+        # 新建「文件夹」：COS 无真文件夹，用 0 字节占位对象模拟（前缀即文件夹）
+        if a == 'create_folder':
+            key = (b.get('key') or '').strip()
+            if not key:
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 key'}, ensure_ascii=False), 'isBase64Encoded': False}
+            try:
+                _api('PUT', '/' + key, data=b'', headers={'Content-Length': '0'})
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True, 'key': key}, ensure_ascii=False), 'isBase64Encoded': False}
+            except Exception as e:
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': str(e)}, ensure_ascii=False), 'isBase64Encoded': False}
+        # 删除单个对象（原图 / 缩略图 / 视频封面）
+        if a == 'delete_object':
+            key = (b.get('key') or '').strip()
+            if not key:
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 key'}, ensure_ascii=False), 'isBase64Encoded': False}
+            try:
+                _api('DELETE', '/' + key)
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True, 'key': key}, ensure_ascii=False), 'isBase64Encoded': False}
+            except Exception as e:
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': str(e)}, ensure_ascii=False), 'isBase64Encoded': False}
+        # 删除整个文件夹（列出前缀下所有对象并并发删除）
+        if a == 'delete_folder':
+            p = (b.get('prefix') or '').strip()
+            if not p:
+                return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': '缺少 prefix'}, ensure_ascii=False), 'isBase64Encoded': False}
+            ks = _ls(p)
+            deleted = 0
+            def _rm(k):
+                try:
+                    _api('DELETE', '/' + k)
+                    return True
+                except Exception:
+                    return False
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                for ok in ex.map(_rm, ks):
+                    deleted += 1 if ok else 0
+            return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': True, 'prefix': p, 'total': len(ks), 'deleted': deleted}, ensure_ascii=False), 'isBase64Encoded': False}
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': 'unknown action'}, ensure_ascii=False), 'isBase64Encoded': False}
     except Exception as e:
         return {'statusCode': 200, 'headers': H, 'body': json.dumps({'ok': False, 'err': str(e)}, ensure_ascii=False), 'isBase64Encoded': False}

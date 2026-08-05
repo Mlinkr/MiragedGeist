@@ -447,7 +447,13 @@ export function openCollectionForm(existing) {
       onclick: () => {
         c.title = $('#c_title').value.trim() || '未命名专栏';
         c.desc = $('#c_desc').value.trim();
-        if (!existing) { c.id = c.title; store.data.works.push(c); }  // 新专栏 id=标题，即 COS 文件夹名
+        if (!existing) {
+          c.id = c.title;
+          c.folder = c.title;            // 记录真实 COS 文件夹名，与改名逻辑一致
+          store.data.works.push(c);
+          // ★ 桶内新建同名文件夹（COS 前缀即文件夹，用 0 字节占位对象表示）
+          cosCreateFolder('Photos/' + c.folder + '/', '', '桶内文件夹创建失败');
+        }
         changed(); closeDrawer();
         toast(existing ? '已保存' : '专栏已创建，点方块上传作品', 'ok');
       }
@@ -495,7 +501,7 @@ export function moveCollection(kind, idx, dir) {
 export async function removeCollection(kind, id) {
   const col = store.findCollection('works', id);
   if (!col) return;
-  if (!confirmBox(`删除专栏「${col.title}」及其中的 ${col.items.length} 件作品？\n仓库里的文件也会一并删除。`)) return;
+  if (!confirmBox(`删除专栏「${col.title}」及其中的 ${col.items.length} 件作品？\n仓库与桶里的文件也会一并删除。`)) return;
 
   // 删除仓库中的媒体文件
   if (gh.ready) {
@@ -507,6 +513,9 @@ export async function removeCollection(kind, id) {
       try { await gh.deleteFile(p, 'chore: remove collection media'); } catch { /* ignore */ }
     }
   }
+  // ★ 桶内同步删除：同名文件夹 Photos/{folder}/ 及其中全部图片
+  const folder = col.folder || folderOf(col) || col.title || col.id;
+  if (folder) cosDeleteFolder('Photos/' + folder + '/', '', '桶内文件夹删除失败');
 
   store.data.works = store.data.works.filter(c => c.id !== id);
   changed();
@@ -1075,9 +1084,17 @@ export function removeItem(kind, colId, itemId) {
   const it = col.items.find(i => i.id === itemId);
   col.items = col.items.filter(i => i.id !== itemId);
   changed();
-  if (gh.ready && it) {
-    [it.src, it.thumb, it.poster].filter(p => p && p.startsWith('media/'))
-      .forEach(p => gh.deleteFile(p, 'chore: remove media').catch(() => {}));
+  if (it) {
+    // ★ 桶内同步删除：原图 + 缩略图（+ 视频封面）
+    [it.src, it.thumb, it.poster].filter(p => p && cosBaseOf(p)).forEach(p => {
+      const key = cosKeyOf(p);
+      if (key) cosDeleteKey(key, '', '桶内图片删除失败');
+    });
+    // GitHub 兜底删除
+    if (gh.ready) {
+      [it.src, it.thumb, it.poster].filter(p => p && p.startsWith('media/'))
+        .forEach(p => gh.deleteFile(p, 'chore: remove media').catch(() => {}));
+    }
   }
 }
 
@@ -1146,6 +1163,18 @@ function cosBaseOf(u) {
   const m = /^https:\/\/[^/]+\.myqcloud\.com\//.exec(u || '');
   return m ? m[0] : '';
 }
+/* 从 COS URL 还原出对象 key（如 Photos/商业 修图/name.jpg）。
+   返回的 key 是「原始未编码」形式，交给 SCF 的 _api 自行编码，删除才能精确命中。 */
+function cosKeyOf(u) {
+  const base = cosBaseOf(u);
+  if (!base) return '';
+  const path = (u || '').slice(base.length);   // 形如 Photos/%E5%95%86.../name.jpg（URL 编码）
+  try { return decodeURIComponent(path); } catch (_) { return path; }
+}
+/* 桶内删除：单对象 / 整个文件夹（含其中所有图片） / 新建同名文件夹 */
+function cosDeleteKey(key, okMsg, failMsg) { return cosSync({ action: 'delete_object', key }, okMsg, failMsg); }
+function cosDeleteFolder(prefix, okMsg, failMsg) { return cosSync({ action: 'delete_folder', prefix }, okMsg, failMsg); }
+function cosCreateFolder(key, okMsg, failMsg) { return cosSync({ action: 'create_folder', key }, okMsg, failMsg); }
 /* 从专栏首个图片 URL 解析出真实 COS 文件夹名（如 Photos/Kpop/ -> 'Kpop'）。
    注意：col.id 只是前端 slug（如 ms92t7bf36gbo），真正的桶文件夹是显示名派生出来的，
    改名/移动必须以真实文件夹名为准，否则会改错/改不到桶。 */
