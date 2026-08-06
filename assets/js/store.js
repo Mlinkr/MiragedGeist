@@ -1,5 +1,5 @@
 /* 站点数据：加载 / 修改 / 发布 */
-import { gh } from './github.js?v=5';
+import { gh } from './github.js?v=13';
 
 export const DATA_PATH = 'data/site.json';
 

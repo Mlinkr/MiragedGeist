@@ -123,6 +123,17 @@ export const gh = {
     return path;
   },
 
+  /**
+   * 查询仓库内文件的 git blob SHA-1（用于上传后的字节级自检）。
+   * GitHub 的 sha 即 git object id = sha1("blob <字节数>\0" + 原始字节)，
+   * 本地可独立算出同一值比对 —— 强一致，且无需下载文件、不受 raw CDN 缓存延迟影响。
+   * @returns {Promise<string>} 40 位十六进制 sha1，查不到返回空串
+   */
+  async fileSha(path) {
+    const r = await this.api(this.contentsUrl(path)).catch(() => null);
+    return r?.sha || '';
+  },
+
   async deleteFile(path, message) {
     const cur = await this.api(this.contentsUrl(path)).catch(() => null);
     if (!cur?.sha) return;

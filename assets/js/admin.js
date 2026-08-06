@@ -1,10 +1,11 @@
 /* 管理模式：连接仓库 · 编辑内容 · 上传媒体 · 一键发布 */
 /* 注意：?v= 为防缓存版本号，修改任意 js 文件后须同步 +1（与 index.html 一致） */
-import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=5';
-import { gh } from './github.js?v=5';
-import { store, DEFAULT_DATA } from './store.js?v=5';
-import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=5';
-import { cosReady, cosRelay, cosRelayPresigned, cosDiagnose } from './cos.js?v=6';
+import { $, el, field, input, textarea, actions, openDrawer, closeDrawer, toast, busy, uid, confirmBox } from './ui.js?v=13';
+import { gh } from './github.js?v=13';
+import { store, DEFAULT_DATA } from './store.js?v=13';
+import { PLATFORMS, detectPlatform, normalizeUrl, fetchProfile, AUTO_OK } from './social.js?v=13';
+import { cosReady, cosRelay, cosRelayPresigned, cosDiagnose } from './cos.js?v=13';
+import { fetchStats, clearStats } from './analytics.js?v=13';
 
 /* ---------- 字节级自检：上传后把桶内文件读回，与本地原始字节比对 SHA256 ---------- */
 // 接受 File/Blob/ArrayBuffer，返回十六进制 SHA-256
@@ -25,18 +26,23 @@ async function verifyIntegrity(localBlob, remoteUrl) {
     return { ok: null, err: e.message };
   }
 }
+// 校验行的基础类名：批量上传器用 up-integ，单图表单用 integ-line
+function integBase(it) { return it._integClass || 'up-integ'; }
+// 统一写入校验行
+function setInteg(it, text, state) {
+  if (!it._integ) return;
+  it._integ.textContent = text;
+  it._integ.className = integBase(it) + (state ? ' ' + state : '');
+}
 // 把校验结果渲染到上传项的「字节校验」行
 function paintInteg(it, v, isOriginal) {
   if (!it._integ) return;
   if (v.ok === true) {
-    it._integ.textContent = isOriginal ? '✅ 字节一致（SHA256 匹配，原图零压缩）' : '✅ 已上传（SHA256 匹配）';
-    it._integ.className = 'up-integ ok';
+    setInteg(it, isOriginal ? '✅ 字节一致（SHA256 匹配，原图零压缩）' : '✅ 已上传（SHA256 匹配）', 'ok');
   } else if (v.ok === null) {
-    it._integ.textContent = '⚠️ 无法校验（' + (v.err || '网络/跨域') + '），上传已成功';
-    it._integ.className = 'up-integ warn';
+    setInteg(it, '⚠️ 无法校验（' + (v.err || '网络/跨域') + '），上传已成功', 'warn');
   } else {
-    it._integ.textContent = '❌ 字节不一致！本地 ' + (v.local || '').slice(0, 10) + ' / 远端 ' + (v.remote || '').slice(0, 10);
-    it._integ.className = 'up-integ bad';
+    setInteg(it, '❌ 字节不一致！本地 ' + (v.local || '').slice(0, 10) + ' / 远端 ' + (v.remote || '').slice(0, 10), 'bad');
   }
 }
 // 上传后回读校验：失败仅提示，不影响上传结果
@@ -45,7 +51,72 @@ async function verifyAndPaint(it, localBlob, remoteUrl, isOriginal) {
     const v = await verifyIntegrity(localBlob, remoteUrl);
     paintInteg(it, v, isOriginal);
   } catch (e) {
-    if (it._integ) { it._integ.textContent = '⚠️ 无法校验（' + (e.message || '错误') + '）'; it._integ.className = 'up-integ warn'; }
+    setInteg(it, '⚠️ 无法校验（' + (e.message || '错误') + '）', 'warn');
+  }
+}
+// 校验进行中的占位提示
+function markChecking(it) { setInteg(it, '⏳ 正在校验字节…', 'checking'); }
+/* ---------- GitHub 分支的字节自检 ----------
+ * GitHub 返回的 sha 就是 git object id：sha1("blob <字节数>\0" + 原始字节)。
+ * 本地按同一公式算出来比对即可证明字节一致 —— 无需下载文件，
+ * 也不受 raw.githubusercontent CDN 缓存延迟影响（刚传完就能校验）。 */
+async function gitBlobSha1(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const full = new Uint8Array(header.length + bytes.length);
+  full.set(header, 0);
+  full.set(bytes, header.length);
+  const h = await crypto.subtle.digest('SHA-1', full);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+/* 没有独立提示行的传图点（头像 / 背景 / 社交图标）：用 toast 汇报字节校验结论。
+ * path 可以是 COS 完整 URL，也可以是 GitHub 仓库相对路径，自动分流。 */
+async function verifyToast(localBlob, pathOrUrl, label, isOriginal) {
+  try {
+    if (!pathOrUrl || pathOrUrl.startsWith('data:')) {
+      toast(`${label}：仅本机预览（未上传）`, '');
+      return;
+    }
+    let ok = null, detail = '';
+    if (/^https?:\/\//i.test(pathOrUrl)) {
+      const v = await verifyIntegrity(localBlob, pathOrUrl);
+      ok = v.ok; detail = v.err || '';
+    } else if (gh.ready) {
+      const [local, remote] = await Promise.all([gitBlobSha1(localBlob), gh.fileSha(pathOrUrl)]);
+      ok = remote ? local === remote : null;
+      detail = remote ? '' : '仓库暂未返回校验值';
+    } else {
+      toast(`${label}：仅本机预览（未上传）`, '');
+      return;
+    }
+    if (ok === true) toast(`${label}：✅ 字节一致${isOriginal ? '（原图零压缩）' : ''}`, 'ok');
+    else if (ok === null) toast(`${label}：⚠️ 无法校验（${detail || '网络/跨域'}），上传已成功`, '');
+    else toast(`${label}：❌ 字节不一致，建议重传`, 'err');
+  } catch (e) {
+    toast(`${label}：⚠️ 无法校验（${e.message || '错误'}）`, '');
+  }
+}
+// 与 GitHub 仓库内文件比对 git blob sha1
+async function verifyGitHubAndPaint(it, localBlob, path, isOriginal) {
+  if (!it._integ) return;
+  try {
+    if (!gh.ready) {
+      setInteg(it, 'ℹ️ 本机预览模式，未上传到远端', 'warn');
+      return;
+    }
+    markChecking(it);
+    const [local, remote] = await Promise.all([gitBlobSha1(localBlob), gh.fileSha(path)]);
+    if (!remote) {
+      setInteg(it, '⚠️ 无法校验（仓库暂未返回文件校验值），上传已成功', 'warn');
+    } else if (local === remote) {
+      setInteg(it, isOriginal
+        ? '✅ 字节一致（GitHub blob SHA1 匹配，原图零压缩）'
+        : '✅ 已上传（GitHub blob SHA1 匹配）', 'ok');
+    } else {
+      setInteg(it, '❌ 字节不一致！本地 ' + local.slice(0, 10) + ' / 仓库 ' + remote.slice(0, 10), 'bad');
+    }
+  } catch (e) {
+    setInteg(it, '⚠️ 无法校验（' + (e.message || '错误') + '），上传已成功', 'warn');
   }
 }
 
@@ -208,9 +279,142 @@ export function openConsole() {
       }, '断开连接（清除 Token）')
     );
   }
+  // 访客流量：数据存在自己的 COS 桶里，与 GitHub 连接与否无关，故放在公共区
+  box.append(el('button', {
+    class: 'btn-ghost', style: 'width:100%;padding:11px;margin:11px 0 0',
+    onclick: () => openStatsPanel(),
+  }, '访客流量面板'));
   // COS 直传配置：与 GitHub 连接与否无关，始终可配（配好即直传 COS，无需云函数）
   box.append(cosConfigBox());
   openDrawer('管理面板', box);
+}
+
+/* ================= 访客流量面板 ================= */
+
+/** 一行「标签 + 条形占比 + 数值」 */
+function statBar(label, value, max, total) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  const share = total > 0 ? Math.round((value / total) * 100) : 0;
+  return el('div', { class: 'st-row' },
+    el('div', { class: 'st-name', title: label }, label),
+    el('div', { class: 'st-track' }, el('i', { style: `width:${pct}%` })),
+    el('div', { class: 'st-val' }, `${value}`, el('span', {}, ` ${share}%`))
+  );
+}
+
+/** 一组分布（设备 / 系统 / 浏览器 / 来源 / 页面） */
+function statGroup(title, pairs, total, emptyText) {
+  const box = el('div', { class: 'st-group' }, el('h4', {}, title));
+  if (!pairs || !pairs.length) {
+    box.append(el('div', { class: 'hint' }, emptyText || '暂无数据'));
+    return box;
+  }
+  const max = Math.max(...pairs.map(p => p[1]));
+  pairs.forEach(([k, v]) => box.append(statBar(k || '（空）', v, max, total)));
+  return box;
+}
+
+/** 每日趋势迷你柱状图（纯 DOM，无第三方图表库） */
+function trendChart(daily) {
+  const wrap = el('div', { class: 'st-trend' });
+  if (!daily || !daily.length) return el('div', { class: 'hint' }, '暂无数据');
+  const max = Math.max(1, ...daily.map(d => d.pv));
+  daily.forEach(d => {
+    const h = Math.round((d.pv / max) * 100);
+    wrap.append(el('div', {
+      class: 'st-bar', title: `${d.date}　浏览 ${d.pv} · 访客 ${d.uv}`,
+    }, el('i', { style: `height:${Math.max(d.pv ? 6 : 2, h)}%` })));
+  });
+  const first = daily[0]?.date?.slice(5) || '';
+  const last = daily[daily.length - 1]?.date?.slice(5) || '';
+  return el('div', {}, wrap,
+    el('div', { class: 'st-axis' }, el('span', {}, first), el('span', {}, last)));
+}
+
+export function openStatsPanel() {
+  const body = el('div');
+  const seg = el('div', { class: 'seg', style: 'margin-bottom:12px' });
+  let days = 30;
+
+  const render = async () => {
+    body.innerHTML = '';
+    body.append(el('div', { class: 'hint', style: 'padding:22px 0;text-align:center' }, '正在读取统计数据…'));
+    try {
+      const s = await fetchStats(days);
+      body.innerHTML = '';
+      // 概览卡片
+      body.append(el('div', { class: 'st-cards' },
+        el('div', { class: 'st-card' }, el('b', {}, String(s.uv)), el('span', {}, `${days} 天访客数`)),
+        el('div', { class: 'st-card' }, el('b', {}, String(s.total)), el('span', {}, `${days} 天浏览量`)),
+        el('div', { class: 'st-card' }, el('b', {}, String(s.today.uv)), el('span', {}, '今日访客')),
+        el('div', { class: 'st-card' }, el('b', {}, String(s.today.pv)), el('span', {}, '今日浏览'))
+      ));
+      if (!s.total) {
+        body.append(el('div', { class: 'tip', style: 'margin-top:14px' },
+          '还没有访问记录。部署最新云函数后，访客打开网页即会自动计入（你自己在编辑模式下的访问不统计）。'));
+        return;
+      }
+      body.append(
+        el('div', { class: 'st-group' }, el('h4', {}, '每日趋势（柱高＝浏览量）'), trendChart(s.daily)),
+        statGroup('设备类型', s.devices, s.total),
+        statGroup('操作系统', s.os, s.total),
+        statGroup('浏览器', s.browsers, s.total),
+        statGroup('访问来源', s.sources, s.total, '暂无外部来源'),
+        statGroup('热门页面', s.pages, s.total)
+      );
+      // 最近访问明细
+      if (s.recent?.length) {
+        const list = el('div', { class: 'st-recent' });
+        s.recent.forEach(r => list.append(el('div', { class: 'st-rec' },
+          el('b', {}, r.t),
+          el('span', {}, `${r.dev} · ${r.os} · ${r.br}`),
+          el('i', {}, r.src === 'direct' ? '直接访问' : r.src)
+        )));
+        body.append(el('div', { class: 'st-group' }, el('h4', {}, `最近访问（${s.recent.length} 条）`), list));
+      }
+      body.append(el('div', { class: 'hint', style: 'margin-top:14px;line-height:1.7' },
+        '数据存在你自己的 COS 桶 <code>Stats/</code> 下，不经任何第三方。'
+        + '不记录原始 IP —— 服务端只保存逐日加盐的 8 位哈希用于识别独立访客，无法反查身份。'
+        + '同一标签页会话内只计一次浏览。'));
+      // 清理入口
+      body.append(el('button', {
+        class: 'btn-ghost danger', style: 'width:100%;padding:10px;margin-top:14px',
+        onclick: async e => {
+          if (!confirmBox('清空全部访客统计记录？此操作不可撤销。')) return;
+          e.target.disabled = true;
+          try {
+            const r = await clearStats('');
+            toast(`已清空 ${r.deleted} 条记录`, 'ok');
+            render();
+          } catch (err) {
+            toast('清空失败：' + err.message, 'err');
+            e.target.disabled = false;
+          }
+        },
+      }, '清空统计记录'));
+    } catch (e) {
+      body.innerHTML = '';
+      const msg = /未配置/.test(e.message)
+        ? '尚未配置 COS 中转地址。请先在管理面板下方填写云函数 URL。'
+        : `读取失败：${e.message}<br><br>如果提示 unknown action，说明云函数还是旧版本，请部署最新的 <code>cos-scf-deploy.zip</code> 后重试。`;
+      body.append(el('div', { class: 'tip' }, msg));
+    }
+  };
+
+  [[7, '近 7 天'], [30, '近 30 天'], [90, '近 90 天']].forEach(([d, label]) => {
+    seg.append(el('button', {
+      class: d === days ? 'on' : '',
+      onclick: e => {
+        days = d;
+        [...seg.children].forEach(c => c.classList.remove('on'));
+        e.target.classList.add('on');
+        render();
+      },
+    }, label));
+  });
+
+  openDrawer('访客流量', el('div', {}, seg, body));
+  render();
 }
 
 /** 上传画质选择器 */
@@ -275,10 +479,10 @@ async function pickAndSetImage(which) {
   if (!file) return;
   const isAvatar = which === 'avatar';
   busy(true, isAvatar ? '上传头像…' : '上传背景…');
-  let path;
+  let path, sent;
   try {
-    const blob = await compressImage(file, isAvatar ? 800 : 2800, .93);
-    path = await storeMedia(blob, isAvatar ? `media/avatar-${uid()}` : `media/cover-${uid()}`, 'jpg');
+    sent = await compressImage(file, isAvatar ? 800 : 2800, .93);
+    path = await storeMedia(sent, isAvatar ? `media/avatar-${uid()}` : `media/cover-${uid()}`, 'jpg');
   } catch (e) {
     busy(false); return toast('上传失败：' + e.message, 'err');
   }
@@ -286,6 +490,8 @@ async function pickAndSetImage(which) {
   store.data.profile[which] = path;
   changed();
   toast(isAvatar ? '头像已更新' : '背景已更新', 'ok');
+  // 字节自检（头像/背景为装饰图，本就按尺寸压缩，校验的是「压缩后字节是否完整送达」）
+  verifyToast(sent, path, isAvatar ? '头像' : '背景', false);
 }
 
 /* ================= 社交媒体 ================= */
@@ -367,6 +573,7 @@ export function openSocialForm(existing) {
           const small = await compressImage(blob, 300, .9);
           avatarIn.value = await storeMedia(small, `media/social/${s.id}`, 'jpg');
           busy(false); toast('头像已存到你的仓库', 'ok');
+          verifyToast(small, avatarIn.value, '社交头像', false);
         } catch (e) { busy(false); toast('转存失败：' + e.message, 'err'); }
       },
     }, '把头像存到我的仓库（更稳定）') : null,
@@ -380,6 +587,7 @@ export function openSocialForm(existing) {
           const blob = await compressImage(file, 400, .92);
           avatarIn.value = await storeMedia(blob, `media/social/${s.id}`, 'jpg');
           busy(false); toast('头像已上传', 'ok');
+          verifyToast(blob, avatarIn.value, '社交头像', false);
         } catch (e) { busy(false); toast('上传失败：' + e.message, 'err'); }
       },
     }, '从本机上传头像（覆盖链接头像）') : null,
@@ -394,6 +602,7 @@ export function openSocialForm(existing) {
           const blob = await compressImage(file, 200, .95);
           iconIn.value = await storeMedia(blob, `media/social/${s.id}-icon`, 'jpg');
           busy(false); toast('图标已上传（覆盖官方图标）', 'ok');
+          verifyToast(blob, iconIn.value, '自定义图标', false);
         } catch (e) { busy(false); toast('上传失败：' + e.message, 'err'); }
       },
     }, '上传自定义图标（覆盖官方图标）') : null,
@@ -533,9 +742,11 @@ export function openFilmForm(existing) {
   const descIn = textarea({ id: 'f_desc', rows: 5, placeholder: '影视相关说明（支持简易 Markdown）' });
   descIn.value = f.desc || '';
 
-  const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '', title: '点击替换图片', style: 'cursor:pointer', onclick: () => pickFilmImage(f, imgEl, titleIn) });
+  // 字节校验提示行（上传后显示 SHA256 比对结果）
+  const integEl = el('div', { class: 'integ-line' }, '');
+  const imgEl = el('img', { class: 'form-img-preview', alt: '', src: f.image || '', title: '点击替换图片', style: 'cursor:pointer', onclick: () => pickFilmImage(f, imgEl, titleIn, integEl) });
   if (!f.image) imgEl.style.display = 'none';
-  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl, titleIn) },
+  const upZone = el('div', { class: 'up-zone', onclick: () => pickFilmImage(f, imgEl, titleIn, integEl) },
     el('div', {}, f.image ? '点击更换影视图片' : '点击上传影视图片'),
     el('div', { class: 'hint' }, '海报 / 剧照，建议竖图（点击图片即可替换）')
   );
@@ -578,7 +789,7 @@ export function openFilmForm(existing) {
   box.append(
     field('影视名', titleIn),
     field('影视说明', descIn, '支持简易 Markdown：**加粗**、<code>`高亮`</code>、<code>- 列表</code>、<code>[文字](链接)</code>'),
-    field('影视图片', el('div', {}, upZone, imgEl)),
+    field('影视图片', el('div', {}, upZone, imgEl, integEl)),
     field('网盘资源链接', el('div', {}, linksBox, addLinkBtn), '可添加百度网盘、夸克网盘等多个资源链接，访客点击即可跳转保存。'),
     act
   );
@@ -586,9 +797,11 @@ export function openFilmForm(existing) {
 }
 
 /** 影视图片：与 Photos v5.0 同一套逻辑 —— COS 可用则原图直传桶的 Cut/ 文件夹，否则退化为 GitHub / dataURL */
-async function pickFilmImage(f, imgEl, titleIn) {
+async function pickFilmImage(f, imgEl, titleIn, integEl) {
   const [file] = await pickFiles({ accept: 'image/*' });
   if (!file) return;
+  // 复用批量上传器那套渲染逻辑：给它一个带 _integ 的轻量壳（_integClass 指定本表单的样式基类）
+  const shell = { _integ: integEl || null, _integClass: 'integ-line' };
   busy(true, '上传影视图片…');
   try {
     // ★ 与 Photos 上传器完全一致：cosReady() 时原图字节级直传桶的 Cut/ 文件夹
@@ -602,6 +815,9 @@ async function pickFilmImage(f, imgEl, titleIn) {
       f.image = r.url;
       imgEl.src = r.url; imgEl.style.display = '';
       toast('图片已上传至腾讯云 COS（Cut 文件夹），保存后生效', 'ok');
+      // ★ 字节级自检：影视封面走原图直传，标准与 Photos 原图一致
+      markChecking(shell);
+      verifyAndPaint(shell, file, r.url, true);
     } else {
       // 兜底：GitHub 或本地 dataURL（COS 中转地址未配置时）
       const blob = await compressImage(file, 1400, .92);
@@ -609,9 +825,16 @@ async function pickFilmImage(f, imgEl, titleIn) {
       f.image = path;
       imgEl.src = path; imgEl.style.display = '';
       toast('图片已选好，保存后生效', 'ok');
+      if (gh.ready) {
+        // 兜底路径会压缩到 1400px，故按「非原图」标准提示
+        verifyGitHubAndPaint(shell, blob, path, false);
+      } else {
+        setInteg(shell, 'ℹ️ 仅本机预览（未上传），已压缩到 1400px', 'warn');
+      }
     }
   } catch (e) {
     toast('上传失败：' + e.message, 'err');
+    setInteg(shell, '❌ 上传失败：' + (e.message || ''), 'bad');
   } finally {
     busy(false);
   }
@@ -879,6 +1102,7 @@ function openUploader(col) {
   async function uploadOne(it, ctx) {
     if (!it.file || it.status === 'done') return;
     setStatus(it, 'uploading', '准备中…'); setProgress(it, 0);
+    setInteg(it, '', '');   // 清空上一轮（或重试前）的校验结果，避免旧提示误导
     const name = uid();
     const mode = ctx.mode;
     // ★ 单文件总超时：3 分钟（压缩 + 上传原图 + 上传缩略图）
@@ -923,6 +1147,9 @@ function openUploader(col) {
           checkTimeout();
           const r2 = await cosRelay(`Photos/${ctx.folder}/${name}-t.jpg`, thumb, 'image/jpeg', p => setProgress(it, 0.80 + p * 0.20));
           it.result = { src: r1.url, thumb: r2.url, kind: 'image' };
+          // ★ 字节级自检：把桶内原图读回，与本地原始字节比对 SHA256（异步，不阻塞上传流程）
+          markChecking(it);
+          verifyAndPaint(it, blob, r1.url, isOriginal);
         } else {
           // 视频：v4.0 去掉 20MB 硬限制（预签名直传无上限）
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
@@ -937,6 +1164,9 @@ function openUploader(col) {
             posterUrl = r2.url;
           } else setProgress(it, 1);
           it.result = { src: r1.url, poster: posterUrl, thumb: posterUrl, kind: 'video' };
+          // ★ 视频同样做字节级自检（视频从不压缩，永远按「原文件」标准校验）
+          markChecking(it);
+          verifyAndPaint(it, it.file, r1.url, true);
         }
         /* ---- COS 分支结束 ---- */
         } catch (cosErr) {
@@ -948,17 +1178,18 @@ function openUploader(col) {
             const ghBase = `media/works/${col.id}/${name}`;
             try {
               if (it.kind === 'image') {
-                let src;
+                let src, sent;               // sent = 真正发出去的字节，用于事后自检
                 if (mode.maxSide === 0) {
                   setStatus(it, 'uploading', 'GitHub 上传原图…');
                   const ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-                  src = await withTimeout(storeMedia(it.file, ghBase, ext), 90_000, 'GitHub 上传原图');
+                  sent = it.file;
+                  src = await withTimeout(storeMedia(sent, ghBase, ext), 90_000, 'GitHub 上传原图');
                 } else {
                   setStatus(it, 'uploading', '压缩中…');
-                  const compressed = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+                  sent = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
                   checkTimeout();
                   setStatus(it, 'uploading', 'GitHub 上传中…');
-                  src = await withTimeout(storeMedia(compressed, ghBase, 'jpg'), 90_000, 'GitHub 上传');
+                  src = await withTimeout(storeMedia(sent, ghBase, 'jpg'), 90_000, 'GitHub 上传');
                 }
                 checkTimeout(); setProgress(it, 0.80);
                 setStatus(it, 'uploading', 'GitHub 上传缩略图…');
@@ -967,6 +1198,8 @@ function openUploader(col) {
                   60_000, 'GitHub 上传缩略图'
                 );
                 it.result = { src, thumb, kind: 'image' };
+                // ★ 降级到 GitHub 后同样做字节自检（原图模式才算「零压缩」）
+                verifyGitHubAndPaint(it, sent, src, mode.maxSide === 0);
               } else {
                 const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase();
                 setStatus(it, 'uploading', 'GitHub 上传视频…');
@@ -976,6 +1209,7 @@ function openUploader(col) {
                 let posterPath = '';
                 if (poster) { checkTimeout(); posterPath = await withTimeout(storeMedia(poster, `${ghBase}-p`, 'jpg'), 60_000, 'GitHub 上传封面'); }
                 it.result = { src, poster: posterPath, thumb: posterPath, kind: 'video' };
+                verifyGitHubAndPaint(it, it.file, src, true);
               }
             } catch (ghErr) {
               throw new Error(`COS 与 GitHub 均失败。COS: ${cosErr.message} | GitHub: ${ghErr.message}`);
@@ -987,24 +1221,28 @@ function openUploader(col) {
       } else if (ctx.target === 'github') {
         const base = `media/works/${col.id}/${name}`;
         if (it.kind === 'image') {
-          let src, ext = 'jpg';
+          let src, ext = 'jpg', sent, zeroLoss = (mode.maxSide === 0);
           if (mode.maxSide === 0) {
             // 原图直传
             setStatus(it, 'uploading', '上传到 GitHub…');
             if (gh.ready && it.file.size > 45 * 1024 * 1024) {
-              src = await withTimeout(storeMedia(await compressImage(it.file, 3000, .94), base, 'jpg'), 120_000, 'GitHub 上传(大图)');
+              // 超过 GitHub 单文件上限，被迫压缩 —— 此时不能再宣称「零压缩」
+              sent = await compressImage(it.file, 3000, .94);
+              zeroLoss = false;
+              src = await withTimeout(storeMedia(sent, base, 'jpg'), 120_000, 'GitHub 上传(大图)');
               ext = 'jpg';
             } else {
               ext = (it.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-              src = await withTimeout(storeMedia(it.file, base, ext), 90_000, 'GitHub 上传原图');
+              sent = it.file;
+              src = await withTimeout(storeMedia(sent, base, ext), 90_000, 'GitHub 上传原图');
             }
           } else {
             // 需要压缩
             setStatus(it, 'uploading', '压缩中…');
-            const compressed = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
+            sent = await withTimeout(compressImage(it.file, mode.maxSide, mode.q), 60_000, '图片压缩');
             checkTimeout();
             setStatus(it, 'uploading', '上传到 GitHub… (1/2)');
-            src = await withTimeout(storeMedia(compressed, base, 'jpg'), 90_000, 'GitHub 上传');
+            src = await withTimeout(storeMedia(sent, base, 'jpg'), 90_000, 'GitHub 上传');
           }
           checkTimeout();
           setProgress(it, 0.80);
@@ -1014,6 +1252,7 @@ function openUploader(col) {
             60_000, 'GitHub 上传缩略图'
           );
           it.result = { src, thumb, kind: 'image' };
+          verifyGitHubAndPaint(it, sent, src, zeroLoss);
         } else {
           const ext = (it.file.name.split('.').pop() || 'mp4').toLowerCase();
           if (it.file.size > 45 * 1024 * 1024) throw new Error('视频超过 45MB，建议压缩后再传');
@@ -1028,14 +1267,19 @@ function openUploader(col) {
             posterPath = await withTimeout(storeMedia(poster, `${base}-p`, 'jpg'), 60_000, 'GitHub 上传封面');
           }
           it.result = { src, poster: posterPath, thumb: posterPath, kind: 'video' };
+          verifyGitHubAndPaint(it, it.file, src, true);
         }
       } else {
         // 本地预览：转 dataURL（不保存，仅本机）
         if (it.kind === 'image') {
           const blob = mode.maxSide === 0 ? it.file : await compressImage(it.file, mode.maxSide, mode.q);
           it.result = { src: await blobToDataURL(blob), thumb: await blobToDataURL(await compressImage(it.file, 700, .8)), kind: 'image' };
+          setInteg(it, mode.maxSide === 0
+            ? 'ℹ️ 仅本机预览（未上传），保留原图字节未做压缩'
+            : 'ℹ️ 仅本机预览（未上传），已按所选画质压缩', 'warn');
         } else {
           it.result = { src: await blobToDataURL(it.file), thumb: '', poster: '', kind: 'video' };
+          setInteg(it, 'ℹ️ 仅本机预览（未上传），原文件字节未改动', 'warn');
         }
         setProgress(it, 1);
       }
@@ -1044,14 +1288,15 @@ function openUploader(col) {
       commitDone(it);
     } catch (e) {
       setStatus(it, 'error', '✗ ' + describeError(e));
+      setInteg(it, '', '');   // 上传失败：不显示任何校验结论
     }
   }
 
   const box = el('div', {},
     el('div', { class: 'tip' }, `目标存储：${targetText}`,
       // 版本标识：修改代码后请同步更新此数字，用于确认浏览器是否加载了最新版本
-      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v5.0')),
-    field('上传画质', qSeg, '原图直传：零压缩、保留原始格式与尺寸（v4.0 预签名直传，无大小限制）；高画质/标准：自动压缩后再传。'),
+      el('span', { style: 'font-size:11px;color:#999;margin-left:8px;font-weight:normal' }, 'v5.1 · 字节校验已开启')),
+    field('上传画质', qSeg, '原图直传：零压缩、保留原始格式与尺寸（v4.0 预签名直传，无大小限制）；高画质/标准：自动压缩后再传。每张传完会自动回读比对 SHA256，结果显示在文件下方。'),
     modeBanner,
     drop,
     list,
