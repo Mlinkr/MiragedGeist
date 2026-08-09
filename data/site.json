@@ -641,6 +641,46 @@
           "kind": "image",
           "title": "IMG 4258",
           "star": false
+        },
+        {
+          "id": "msllvj35htgyi",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74bo3fh7.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74bo3fh7-t.jpg",
+          "kind": "image",
+          "title": "IMG_4550",
+          "star": false
+        },
+        {
+          "id": "msllvj35t1l64",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74d7zxrd.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74d7zxrd-t.jpg",
+          "kind": "image",
+          "title": "IMG_4551",
+          "star": false
+        },
+        {
+          "id": "msllvj35m3r9k",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74fstlha.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslls74fstlha-t.jpg",
+          "kind": "image",
+          "title": "IMG_4549",
+          "star": false
+        },
+        {
+          "id": "msllvj357809a",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/msllt4n0nwi2s.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/msllt4n0nwi2s-t.jpg",
+          "kind": "image",
+          "title": "IMG_4547",
+          "star": false
+        },
+        {
+          "id": "msllvj35hoea5",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslltm4gw28rk.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E5%AD%9F%E5%AD%90%E4%B9%89/mslltm4gw28rk-t.jpg",
+          "kind": "image",
+          "title": "IMG_4548",
+          "star": false
         }
       ]
     },
@@ -1466,5 +1506,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-05T15:48:41.960Z"
+  "updatedAt": "2026-08-09T09:34:22.232Z"
 }
