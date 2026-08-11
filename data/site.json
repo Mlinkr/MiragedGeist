@@ -1387,6 +1387,33 @@
           "kind": "image",
           "title": "IMG 2258",
           "star": false
+        },
+        {
+          "id": "msowht4zykbv3",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhpthctqw0.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhpthctqw0-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 4669",
+          "star": false
+        },
+        {
+          "id": "msowhu00mhol1",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhptj9uxjf.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhptj9uxjf-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 4667",
+          "star": false
+        },
+        {
+          "id": "msowhurok313l",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhptiejg0x.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E9%87%91%E7%8E%9F%E5%BA%AD/msowhptiejg0x-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 4668",
+          "star": false
         }
       ]
     },
@@ -1576,5 +1603,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-08-11T12:45:21.351Z"
+  "updatedAt": "2026-08-11T16:54:52.334Z"
 }
