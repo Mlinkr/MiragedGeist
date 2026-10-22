@@ -1972,6 +1972,41 @@
           "star": false
         }
       ]
+    },
+    {
+      "id": "白鹿",
+      "title": "白鹿",
+      "desc": "",
+      "items": [
+        {
+          "id": "mviv3hrjjw3k4",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gt6q90v.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gt6q90v-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 7156",
+          "star": true
+        },
+        {
+          "id": "mviv3sl9v235b",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gs7cq1s.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gs7cq1s-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 7157",
+          "star": true
+        },
+        {
+          "id": "mviv461el2uex",
+          "src": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gtlt6pj.jpg",
+          "thumb": "https://miragedgeist-1463128155.cos.ap-guangzhou.myqcloud.com/Photos/%E7%99%BD%E9%B9%BF/mviv32gtlt6pj-t.jpg",
+          "poster": "",
+          "kind": "image",
+          "title": "IMG 7155",
+          "star": true
+        }
+      ],
+      "folder": "白鹿"
     }
   ],
   "films": [
@@ -2112,5 +2147,5 @@
       ]
     }
   ],
-  "updatedAt": "2026-10-14T01:15:36.010Z"
+  "updatedAt": "2026-10-22T01:28:53.260Z"
 }
